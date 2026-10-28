@@ -22,9 +22,9 @@
   </Grid>
   <Grid x:Name="PlayerLayout" Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
+   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" MouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
     <Grid>
-     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
+     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" MouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
      <Viewbox x:Name="VideoScale" Stretch="Uniform"><Image x:Name="Video" Stretch="Fill" Width="16" Height="9" RenderOptions.BitmapScalingMode="LowQuality"/></Viewbox>
      <TextBlock x:Name="VideoPlaceholder" Text="Your screen, uninterrupted.&#10;&#10;Open videos or choose a capture device." Foreground="#8495AF" FontSize="16" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="32" MaxWidth="420"/>
     </Grid>

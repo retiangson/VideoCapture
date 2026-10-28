@@ -9,6 +9,8 @@ namespace VideoCapture.Services;
 internal sealed record TranscriptionLanguage(string Id, string Name)
 { public override string ToString() => Name; }
 
+internal sealed record MicrophoneFeedback(int Level, string Text, string Status);
+
 internal static class AudioTranscription
 {
     public const int MaximumSeconds = 120;
@@ -51,11 +53,11 @@ internal static class AudioTranscription
     public static Task<string> RecognizeAsync(string wave, string recognizerId, CancellationToken token) =>
         RecognizeInputAsync(wave, recognizerId, CancellationToken.None, token);
 
-    public static Task<string> RecognizeMicrophoneAsync(string recognizerId, CancellationToken stop, CancellationToken token) =>
-        RecognizeInputAsync(null, recognizerId, stop, token);
+    public static Task<string> RecognizeMicrophoneAsync(string recognizerId, CancellationToken stop, CancellationToken token, IProgress<MicrophoneFeedback>? feedback = null) =>
+        RecognizeInputAsync(null, recognizerId, stop, token, feedback);
 
     // A graceful stop keeps recognized speech; cancellation discards the in-flight result.
-    private static Task<string> RecognizeInputAsync(string? wave, string recognizerId, CancellationToken stop, CancellationToken token) => Task.Run(async () =>
+    private static Task<string> RecognizeInputAsync(string? wave, string recognizerId, CancellationToken stop, CancellationToken token, IProgress<MicrophoneFeedback>? feedback = null) => Task.Run(async () =>
     {
         token.ThrowIfCancellationRequested();
         using var recognizer = new SpeechRecognitionEngine(recognizerId);
@@ -63,11 +65,31 @@ internal static class AudioTranscription
         if (wave is null) recognizer.SetInputToDefaultAudioDevice();
         else recognizer.SetInputToWaveFile(wave);
         var text = new List<string>();
+        int level = 0;
+        string hypothesis = "", status = "Listening to the default Windows microphone…";
+        var feedbackClock = Stopwatch.StartNew();
+        void Report(bool force = false)
+        {
+            if (feedback is null) return;
+            lock (text)
+            {
+                if (!force && feedbackClock.ElapsedMilliseconds < 100) return;
+                feedbackClock.Restart();
+                string preview = string.Join(Environment.NewLine, text.Append(hypothesis).Where(t => !string.IsNullOrWhiteSpace(t)));
+                feedback.Report(new(level, preview, status));
+            }
+        }
+        recognizer.AudioLevelUpdated += (_, e) => { lock (text) level = e.AudioLevel; Report(); };
+        recognizer.SpeechHypothesized += (_, e) => { lock (text) { hypothesis = e.Result.Text; status = "Speech detected · recognizing…"; } Report(true); };
+        recognizer.SpeechRecognitionRejected += (_, _) => { lock (text) { status = "Speech was not understood. Check the selected language and microphone level."; hypothesis = ""; } Report(true); };
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         recognizer.SpeechRecognized += (_, e) =>
         {
-            if (e.Result.Confidence >= .35f && !string.IsNullOrWhiteSpace(e.Result.Text))
-                lock (text) text.Add(e.Result.Text.Trim());
+            if ((wave is null || e.Result.Confidence >= .35f) && !string.IsNullOrWhiteSpace(e.Result.Text))
+            {
+                lock (text) { text.Add(e.Result.Text.Trim()); hypothesis = ""; status = "Speech recognized · keep speaking, or choose Stop & transcribe."; }
+                Report(true);
+            }
         };
         recognizer.RecognizeCompleted += (_, e) =>
         {

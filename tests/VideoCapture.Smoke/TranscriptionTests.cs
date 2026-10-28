@@ -135,8 +135,16 @@ internal static class TranscriptionTests
                 Press(browser, "CancelAudioButton");
                 await WaitAsync(() => ((ComboBox)browser.FindName("TranscriptSource")).IsEnabled, "microphone cancellation and release");
                 if (browser.Transcript != previousTranscript) throw new Exception("Microphone cancellation changed the previous transcript.");
-                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(750));
-                await AudioTranscription.RecognizeMicrophoneAsync(english.Id, stop.Token, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
+                int feedbackEvents = 0;
+                var microphoneFeedback = new Progress<MicrophoneFeedback>(update =>
+                {
+                    if (update.Level is < 0 or > 100) throw new Exception("Microphone level is out of range.");
+                    feedbackEvents++;
+                });
+                await AudioTranscription.RecognizeMicrophoneAsync(english.Id, stop.Token, CancellationToken.None, microphoneFeedback).WaitAsync(TimeSpan.FromSeconds(10));
+                await Task.Delay(100);
+                if (feedbackEvents == 0) throw new Exception("The microphone opened but Windows delivered no audio level or speech events.");
                 Console.WriteLine("Default microphone checks passed: input opened, graceful stop, cancellation/release, no-video capture, hidden-panel capture, source lock and previous transcript preservation.");
             }
             browser.UpdateLayout();

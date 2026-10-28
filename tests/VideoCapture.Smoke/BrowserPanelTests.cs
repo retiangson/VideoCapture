@@ -30,9 +30,18 @@ internal static class BrowserPanelTests
         {
             await WaitAsync(() => ((Button)window.FindName("OpenButton")).IsEnabled, "settings ready");
             SendKey(window, Key.F11); await Task.Delay(100);
-            var overlay = (UIElement)window.FindName("VideoInputOverlay");
+            var overlay = (UIElement)window.FindName("VideoBorder");
             Click(overlay, MouseButton.Left);
-            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Left-click must show the player menu.");
+            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Quick click must keep the hidden menu hidden.");
+            Down(overlay);
+            await WaitAsync(() => window.FloatingToolbar?.IsVisible == true, "held left-click shows menu");
+            Up(overlay);
+            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Releasing a long press must leave the menu visible.");
+            var menuWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent };
+            window.FloatingToolbar.RaiseEvent(menuWheel);
+            if (Math.Abs(window.FloatingToolbar.Opacity - .91) > .001 || Math.Abs(((Slider)window.FindName("MenuOpacity")).Value - .91) > .001)
+                throw new Exception("Menu wheel must update the whole menu and saved opacity control.");
+            Console.WriteLine("Held/quick menu gestures and direct menu opacity checks passed.");
             Click(overlay, MouseButton.Right);
             var browser = window.BrowserWindow ?? throw new Exception("Right-click must create the browser.");
             if (!browser.IsVisible || window.FloatingToolbar?.IsVisible != true) throw new Exception("Browser and player toggles must be independent.");
@@ -40,6 +49,11 @@ internal static class BrowserPanelTests
                 throw new Exception("Video actions must be disabled without video.");
             await browser.Initialization.WaitAsync(TimeSpan.FromSeconds(25));
             if (browser.ActiveBrowser?.CoreWebView2 is null) throw new Exception("Browser initialization failed.");
+            var outsideWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.MouseWheelEvent };
+            overlay.RaiseEvent(outsideWheel);
+            if (!outsideWheel.Handled || Math.Abs(browser.Opacity - .95) > .001) throw new Exception("Scrolling video outside the browser must adjust browser opacity.");
+            ((Slider)browser.FindName("Transparency")).Value = 1;
+            Console.WriteLine("Browser initialized; outside opacity routing passed.");
             var titleBar = (UIElement)browser.FindName("BrowserTitleBar");
             var wheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent };
             titleBar.RaiseEvent(wheel);
@@ -84,11 +98,20 @@ internal static class BrowserPanelTests
             await window.OpenFileAsync(source);
             var player = ((VideoView)window.FindName("GpuVideo")).MediaPlayer!;
             await WaitAsync(() => window.PresentedFrameCount > 3 && player.IsSeekable, "source video");
+            overlay = (UIElement)window.FindName("VideoInputOverlay");
+            Down(overlay); Up(overlay); await Task.Delay(550);
+            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("A quick click must not show the menu after its hold timer expires.");
+            Down(overlay); await WaitAsync(() => window.FloatingToolbar?.IsVisible == true, "GPU held left-click shows menu"); Up(overlay);
+            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Long press must work over GPU video.");
+            Click(overlay, MouseButton.Left);
+            Console.WriteLine("GPU held/quick menu gestures passed.");
             ((Slider)window.FindName("Seek")).Value = 100;
+            if (((Button)browser.FindName("RecordVideoButton")).IsEnabled) throw new Exception("Recording must be disabled immediately while a seek is pending.");
             await WaitAsync(() => player.Time >= 2500, "source position");
             await WaitAsync(() => ((Button)browser.FindName("RecordVideoButton")).IsEnabled, "browser recording action");
             Press(browser, "RecordVideoButton");
-            await WaitAsync(() => ((TextBlock)browser.FindName("RecordVideoLabel")).Text == "Stop recording" && ((Button)window.FindName("OpenButton")).IsEnabled == false && window.PresentedFrameCount > 3, "local video recording");
+            try { await WaitAsync(() => ((TextBlock)browser.FindName("RecordVideoLabel")).Text == "Stop recording" && ((Button)window.FindName("OpenButton")).IsEnabled == false && window.PresentedFrameCount > 3, "local video recording"); }
+            catch (TimeoutException ex) { throw new Exception($"Recording state: label={((TextBlock)browser.FindName("RecordVideoLabel")).Text}, open={((Button)window.FindName("OpenButton")).IsEnabled}, player={player.State}, position={player.Time}, status={((TextBlock)window.FindName("Status")).Text}", ex); }
             Click(overlay, MouseButton.Right);
             await Task.Delay(2500);
             Click(overlay, MouseButton.Right);
@@ -170,8 +193,11 @@ internal static class BrowserPanelTests
         panel.Shutdown();
         if (frame != 1 || text != 1 || record != 1) throw new Exception("Browser action buttons did not raise their corresponding events.");
     }
+    private static void Down(UIElement target) => target.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+    private static void Up(UIElement target) => target.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
     private static void Click(UIElement video, MouseButton button)
     {
+        if (button == MouseButton.Left) Down(video);
         var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, button) { RoutedEvent = button == MouseButton.Left ? UIElement.MouseLeftButtonUpEvent : UIElement.MouseRightButtonUpEvent };
         video.RaiseEvent(args);
     }

@@ -78,6 +78,7 @@ public partial class MainWindow
         _resumeClock.Restart();
         InvalidateSubtitleSpeech();
         session.Player.Time = _requestedPositionMs.Value;
+        UpdateFullscreenToolbar();
     }
     private void RememberPlaybackPosition()
     {

@@ -73,6 +73,11 @@ public partial class FullscreenToolbar : Window
         try { Opacity = Math.Clamp(opacity, 0.35, 1); OpacitySlider.Value = Opacity; MenuVolume.Value = volume; MenuSpeechVolume.Value = speechVolume; }
         finally { _updatingLevels = false; }
     }
+    private void Menu_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        OpacitySlider.Value = Math.Clamp(OpacitySlider.Value + e.Delta / 120d * .05, .35, 1);
+        e.Handled = true;
+    }
     private void MenuOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     { Opacity = Math.Clamp(e.NewValue, 0.35, 1); if (!_updatingLevels) MenuOpacityRequested?.Invoke(this, EventArgs.Empty); }
     private void MenuVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

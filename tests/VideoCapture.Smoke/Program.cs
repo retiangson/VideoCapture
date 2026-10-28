@@ -399,7 +399,7 @@ internal static class Program
                 if (((UIElement)window.FindName(name)).Visibility != Visibility.Collapsed)
                     throw new Exception("Fullscreen did not hide " + name);
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Fullscreen toolbar must start hidden.");
-            ((UIElement)window.FindName("VideoBorder")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            window.ToggleFullscreenToolbar();
             PumpUntil(() => window.FloatingToolbar?.IsVisible == true, "floating fullscreen toolbar");
             if (((Button)window.FloatingToolbar!.FindName("CopyFrameButton")).IsEnabled != true)
                 throw new Exception("Floating toolbar must permit frame capture while video is playing.");
@@ -488,10 +488,10 @@ internal static class Program
             if (((FrameworkElement)window.FindName("DevicePanel")).Visibility != Visibility.Collapsed)
                 throw new Exception("GPU fullscreen must hide the device panel.");
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("GPU fullscreen controls must start hidden.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Left-clicking the GPU overlay must show controls.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Left-clicking GPU video again must hide controls.");
+            window.ToggleFullscreenToolbar();
+            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Showing GPU overlay controls failed.");
+            window.ToggleFullscreenToolbar();
+            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Hiding GPU overlay controls failed.");
             SendKey(window, Key.Escape);
             CloseWindow(window);
             Console.WriteLine("WPF layout rendered. All smoke checks passed.");

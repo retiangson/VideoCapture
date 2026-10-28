@@ -57,6 +57,7 @@ public partial class MainWindow
             _microphoneStop = new(TimeSpan.FromSeconds(AudioTranscription.MaximumSeconds));
             _transcribing = true;
             _audioCaptureClock.Restart();
+            _browser.ResetMicrophoneFeedback();
             _browser.SetTranscriptStatus("Listening to the default Windows microphone. Click Stop & transcribe when finished (maximum 2 minutes).");
             _transcriptionTask = TranscribeMicrophoneAsync(microphoneLanguage, _microphoneStop.Token, _transcriptionCancellation.Token);
             return;
@@ -77,9 +78,20 @@ public partial class MainWindow
     {
         try
         {
-            string text = await AudioTranscription.RecognizeMicrophoneAsync(language, stop, token);
+            int peak = 0;
+            bool heardSpeech = false;
+            var feedback = new Progress<MicrophoneFeedback>(update =>
+            {
+                if (_closing || token.IsCancellationRequested || _microphoneStop is null || _microphoneStop.Token != stop) return;
+                peak = Math.Max(peak, update.Level);
+                heardSpeech |= !string.IsNullOrWhiteSpace(update.Text);
+                _browser?.SetMicrophoneFeedback(update);
+            });
+            string text = await AudioTranscription.RecognizeMicrophoneAsync(language, stop, token, feedback);
             if (_closing || token.IsCancellationRequested) return;
-            if (string.IsNullOrWhiteSpace(text)) _browser?.SetTranscriptStatus("No clear microphone speech was recognized. Check the default Windows input device and microphone privacy permissions. Previous transcript was kept.");
+            if (string.IsNullOrWhiteSpace(text)) _browser?.SetTranscriptStatus(peak <= 1 && !heardSpeech
+                ? "No microphone input was detected. Check the default input device, mute switch, input volume, and Windows microphone permissions. Previous transcript was kept."
+                : "Microphone audio was detected but no clear speech was recognized. Choose the language you are speaking and reduce background noise. Previous transcript was kept.");
             else { _browser?.SetTranscript(text); _browser?.SetTranscriptStatus("Microphone transcript ready. Review it, then choose Copy transcript."); }
         }
         catch (OperationCanceledException) { if (!_closing) _browser?.SetTranscriptStatus("Microphone transcription cancelled. Previous transcript was kept."); }

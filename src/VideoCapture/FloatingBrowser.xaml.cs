@@ -43,6 +43,24 @@ public partial class FloatingBrowser : Window
         CancelAudioButton.IsEnabled = capturing || processing;
         TranscriptText.IsReadOnly = capturing || processing;
     }
+    internal void SetMicrophoneFeedback(MicrophoneFeedback feedback)
+    {
+        MicrophoneFeedbackPanel.Visibility = Visibility.Visible;
+        MicrophoneLevel.Value = feedback.Level;
+        MicrophonePreview.Text = feedback.Text;
+        SetTranscriptStatus(feedback.Status);
+    }
+    private void MicrophoneSettings_Click(object sender, RoutedEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:sound") { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { SetTranscriptStatus("Could not open Windows input settings: " + ex.Message); }
+    }
+    internal void ResetMicrophoneFeedback()
+    {
+        MicrophoneLevel.Value = 0;
+        MicrophonePreview.Text = "Speak, then pause briefly to see recognized text here.";
+        MicrophoneFeedbackPanel.Visibility = MicrophoneSelected ? Visibility.Visible : Visibility.Collapsed;
+    }
     internal void SetTranscript(string text) => TranscriptText.Text = text;
     internal void SetTranscriptStatus(string text) { TranscriptStatus.Text = text; TranscriptPanel.ToolTip = text; }
     private void AudioText_Click(object sender, RoutedEventArgs e)
@@ -53,7 +71,11 @@ public partial class FloatingBrowser : Window
         if (!show && !IsBrowserFullscreen) MinHeight = 400;
     }
     private void AudioStart_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
-    private void TranscriptSource_Changed(object sender, SelectionChangedEventArgs e) => TranscriptSourceRequested?.Invoke(this, EventArgs.Empty);
+    private void TranscriptSource_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (MicrophoneLevel is not null) ResetMicrophoneFeedback();
+        TranscriptSourceRequested?.Invoke(this, EventArgs.Empty);
+    }
     private void CancelAudio_Click(object sender, RoutedEventArgs e) => CancelAudioRequested?.Invoke(this, EventArgs.Empty);
     private void CopyTranscript_Click(object sender, RoutedEventArgs e) => CopyTranscriptRequested?.Invoke(this, EventArgs.Empty);
     private void TranscriptLanguage_Changed(object sender, SelectionChangedEventArgs e) { if (!_updatingTranscriptLanguage) TranscriptLanguageRequested?.Invoke(this, EventArgs.Empty); }
@@ -287,9 +309,11 @@ public partial class FloatingBrowser : Window
     private void Forward_Click(object sender, RoutedEventArgs e) { if (ActiveBrowser?.CoreWebView2?.CanGoForward == true) ActiveBrowser.CoreWebView2.GoForward(); }
     private void Reload_Click(object sender, RoutedEventArgs e) => ActiveBrowser?.CoreWebView2?.Reload();
     private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
+    internal void AdjustOpacity(int wheelDelta) => Transparency.Value = Math.Clamp(
+        Transparency.Value + wheelDelta / 120d * .05, Transparency.Minimum, Transparency.Maximum);
     private void TitleBar_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        Transparency.Value = Math.Clamp(Transparency.Value + e.Delta / 120d * 0.05, Transparency.Minimum, Transparency.Maximum);
+        AdjustOpacity(e.Delta);
         e.Handled = true;
     }
     private void Opacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

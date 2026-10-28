@@ -96,10 +96,64 @@ public partial class MainWindow
         ToggleBrowser();
         e.Handled = true;
     }
+    private CancellationTokenSource? _videoMenuHoldCancellation;
+    private UIElement? _videoMenuPressTarget;
+    private Point _videoMenuPressOrigin;
+    private bool _videoMenuHoldShown;
+
+    private void BeginVideoMenuPress(UIElement target, Point position)
+    {
+        CancelVideoMenuPress();
+        if (!target.CaptureMouse()) return;
+        _videoMenuPressTarget = target;
+        _videoMenuPressOrigin = position;
+        _videoMenuHoldCancellation = new();
+        _ = ShowHeldVideoMenuAsync(_videoMenuHoldCancellation.Token);
+    }
+    private async Task ShowHeldVideoMenuAsync(CancellationToken token)
+    {
+        try { await Task.Delay(450, token); }
+        catch (OperationCanceledException) { return; }
+        if (token.IsCancellationRequested || !_fullscreen || _closing || _videoMenuPressTarget is null) return;
+        _videoMenuHoldShown = true;
+        ShowFullscreenToolbar();
+    }
+    private void CancelVideoMenuPress()
+    {
+        _videoMenuHoldCancellation?.Cancel();
+        _videoMenuHoldCancellation?.Dispose();
+        _videoMenuHoldCancellation = null;
+        var target = _videoMenuPressTarget;
+        _videoMenuPressTarget = null;
+        _videoMenuHoldShown = false;
+        if (target?.IsMouseCaptured == true) target.ReleaseMouseCapture();
+    }
+    private void Video_MenuPressLostCapture(object sender, MouseEventArgs e)
+    { if (_videoMenuPressTarget is not null) CancelVideoMenuPress(); }
+    private void Video_MenuPressMove(object sender, MouseEventArgs e)
+    {
+        if (_videoMenuPressTarget is not { } target) return;
+        var position = e.GetPosition(target);
+        if (Math.Abs(position.X - _videoMenuPressOrigin.X) > SystemParameters.MinimumHorizontalDragDistance ||
+            Math.Abs(position.Y - _videoMenuPressOrigin.Y) > SystemParameters.MinimumVerticalDragDistance)
+            CancelVideoMenuPress();
+    }
     private void Video_LeftClick(object sender, MouseButtonEventArgs e)
     {
         if (!_fullscreen || e.ClickCount != 1) return;
-        ToggleFullscreenToolbar();
+        bool active = _videoMenuPressTarget is not null, held = _videoMenuHoldShown;
+        CancelVideoMenuPress();
+        if (active && !held) HideFullscreenToolbar();
+        e.Handled = true;
+    }
+    private void Video_OpacityWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (_browser is not { IsVisible: true })
+        {
+            if (_fullscreenToolbar?.IsVisible != true) return;
+            MenuOpacity.Value = Math.Clamp(MenuOpacity.Value + e.Delta / 120d * .05, .35, 1);
+        }
+        else _browser.AdjustOpacity(e.Delta);
         e.Handled = true;
     }
 }

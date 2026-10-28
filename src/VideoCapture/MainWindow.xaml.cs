@@ -494,6 +494,7 @@ public partial class MainWindow : Window
     private void SetFullscreen(bool enabled)
     {
         if (enabled == _fullscreen) return;
+        CancelVideoMenuPress();
         var monitor = enabled ? FullscreenDisplay.MonitorBounds(this) : Rect.Empty;
         if (enabled)
         {
@@ -549,7 +550,12 @@ public partial class MainWindow : Window
 
     private void Video_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { SetFullscreen(!_fullscreen); e.Handled = true; }
+        if (e.ClickCount == 2) { CancelVideoMenuPress(); SetFullscreen(!_fullscreen); e.Handled = true; }
+        else if (_fullscreen && sender is UIElement target)
+        {
+            BeginVideoMenuPress(target, e.GetPosition(target));
+            e.Handled = true;
+        }
         Focus();
     }
 
@@ -582,6 +588,7 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_busy && _sessionCreation is null) { Status.Text = "Please wait for the current operation to finish, then close again."; return; }
         _closing = true;
+        CancelVideoMenuPress();
         _transcriptionCancellation?.Cancel();
         CloseFullscreenToolbar();
         if (_browser?.SessionReady == true)

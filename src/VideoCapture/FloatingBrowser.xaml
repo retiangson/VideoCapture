@@ -38,6 +38,10 @@
       <Button x:Name="CopyTranscriptButton" Content="Copy transcript" IsEnabled="False" Click="CopyTranscript_Click" MinHeight="28" Padding="8,4" Margin="0,0,6,5"/>
       <Button x:Name="CancelAudioButton" Content="Cancel" IsEnabled="False" Click="CancelAudio_Click" MinHeight="28" Padding="8,4" Margin="0,0,0,5"/>
      </WrapPanel>
+     <StackPanel x:Name="MicrophoneFeedbackPanel" Visibility="Collapsed" Margin="0,0,0,6">
+      <DockPanel><Button Content="Input settings" DockPanel.Dock="Right" Click="MicrophoneSettings_Click" MinHeight="22" Padding="5,2" Margin="6,0,0,0" FontSize="10" ToolTip="Choose your default microphone, input volume, and test the input in Windows"/><TextBlock Text="Microphone input" Foreground="#91A0B7" FontSize="10" Margin="0,0,8,0"/><ProgressBar x:Name="MicrophoneLevel" Minimum="0" Maximum="100" Height="7" VerticalAlignment="Center" ToolTip="Live input level from Windows speech recognition"/></DockPanel>
+      <TextBlock x:Name="MicrophonePreview" TextWrapping="Wrap" MaxHeight="48" Foreground="#5CE0C1" FontSize="11" Margin="0,4,0,0"/>
+     </StackPanel>
      <TextBox x:Name="TranscriptText" Height="75" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#172236" Foreground="#E8EEF7" BorderBrush="#344157" Padding="6" FontSize="12" TextChanged="TranscriptText_Changed" ToolTip="Review and correct the transcript, then copy it"/>
      <TextBlock x:Name="TranscriptStatus" Text="Offline Windows dictation · choose video audio or microphone · up to 2 minutes" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
     </StackPanel></Expander>
