@@ -22,9 +22,15 @@ internal sealed record AppPreferences
     public int SpeechRegion { get; init; }
     public bool ShowFullscreenProgress { get; init; } = true;
     public string? TranscriptionLanguage { get; init; }
+    public List<string> BrowserTabs { get; init; } = [];
+    public int BrowserSelectedTab { get; init; }
 
     internal AppPreferences Normalize() => this with
     {
+        BrowserTabs = (BrowserTabs ?? []).Where(url => url is { Length: > 0 and <= 8192 } &&
+            (url == "about:blank" || (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && !string.IsNullOrEmpty(uri.Host))))
+            .Take(32).ToList(),
+        BrowserSelectedTab = Math.Clamp(BrowserSelectedTab, 0, 31),
         VideoDevice = ValidName(VideoDevice) ? VideoDevice : null,
         AudioDevice = ValidName(AudioDevice) ? AudioDevice : null,
         Volume = double.IsFinite(Volume) ? Math.Clamp(Volume, 0, 100) : 75,

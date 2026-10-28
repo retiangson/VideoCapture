@@ -69,6 +69,8 @@ public partial class MainWindow
             SoftwarePreview = PreviewRenderer.SelectedIndex == 1,
             PictureFit = _fullscreen ? _windowedPictureFit : PictureFit.SelectedIndex,
             Volume = Volume.Value,
+            BrowserTabs = _browser?.SessionReady == true ? _browser.SessionTabs : _preferences.BrowserTabs,
+            BrowserSelectedTab = _browser?.SessionReady == true ? _browser.SelectedTabIndex : _preferences.BrowserSelectedTab,
             BrowserOpacity = _browser?.Opacity ?? _preferences.BrowserOpacity,
             MenuOpacity = MenuOpacity.Value,
             Playlist = _playlist.Items.Select(item => item.Path).ToList(),

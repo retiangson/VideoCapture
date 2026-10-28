@@ -52,7 +52,7 @@ public partial class MainWindow
         try { if (wave is not null) await StartCaptureAsync(false, wave); }
         catch { _audioCapture = null; DeleteUnusedAudioFiles(); throw; }
         _audioCaptureClock.Restart();
-        _browser.SetTranscriptStatus("Capturing video audio only. Click Stop & transcribe when finished (maximum 2 minutes).", true);
+        _browser.SetTranscriptStatus("Capturing video audio only. Click Stop & transcribe when finished (maximum 2 minutes).");
     }
     private async Task FinishAudioCaptureAsync(bool restartLive)
     {
@@ -77,7 +77,7 @@ public partial class MainWindow
         _transcriptionCancellation?.Dispose();
         _transcriptionCancellation = new();
         _transcribing = true;
-        _browser?.SetTranscriptStatus("Converting captured video audio to text on this PC…", true);
+        _browser?.SetTranscriptStatus("Converting captured video audio to text on this PC…");
         _transcriptionTask = TranscribeAudioAsync(capture, end, wave, _transcriptionCancellation.Token);
     }
     private async Task TranscribeAudioAsync(AudioCapture capture, long end, string wave, CancellationToken token)

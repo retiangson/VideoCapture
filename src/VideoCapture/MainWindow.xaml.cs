@@ -584,6 +584,8 @@ public partial class MainWindow : Window
         _closing = true;
         _transcriptionCancellation?.Cancel();
         CloseFullscreenToolbar();
+        if (_browser?.SessionReady == true)
+            _preferences = _preferences with { BrowserTabs = _browser.SessionTabs, BrowserSelectedTab = _browser.SelectedTabIndex };
         _browser?.Shutdown();
         _timer.Stop();
         _deviceTimer.Stop();

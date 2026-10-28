@@ -40,6 +40,23 @@ internal static class BrowserPanelTests
                 throw new Exception("Video actions must be disabled without video.");
             await browser.Initialization.WaitAsync(TimeSpan.FromSeconds(25));
             if (browser.ActiveBrowser?.CoreWebView2 is null) throw new Exception("Browser initialization failed.");
+            browser.UpdateLayout();
+            var navigation = (Expander)browser.FindName("NavigationPanel");
+            var transcriptPanel = (Expander)browser.FindName("TranscriptPanel");
+            if (navigation.IsExpanded || transcriptPanel.IsExpanded) throw new Exception("Navigation and transcript must start collapsed.");
+            var host = (FrameworkElement)browser.FindName("BrowserHost");
+            var tools = (FrameworkElement)browser.FindName("VideoTools");
+            if (tools.TranslatePoint(new Point(), browser).Y < host.TranslatePoint(new Point(0, host.ActualHeight), browser).Y)
+                throw new Exception("Capture tools must be below the browser page.");
+            browser.SetTranscript("Hidden transcript result"); browser.SetTranscriptStatus("Ready");
+            if (transcriptPanel.IsExpanded) throw new Exception("A transcript update must not open the panel without a click.");
+            navigation.IsExpanded = true; browser.UpdateLayout();
+            if (!((TextBox)browser.FindName("Address")).IsVisible) throw new Exception("Expanding navigation must reveal the address field.");
+            navigation.IsExpanded = false;
+            var retainedTab = await browser.AddTabAsync("about:blank");
+            browser.Close(); browser.Show();
+            if (browser.TabCount != 2 || browser.ActiveBrowser != retainedTab) throw new Exception("Closing and reopening must retain tabs and selection.");
+            await browser.CloseTabAsync(retainedTab!);
             Click(overlay, MouseButton.Right);
             if (browser.IsVisible || window.FloatingToolbar?.IsVisible != true) throw new Exception("Right-click must only hide the browser.");
             Click(overlay, MouseButton.Left);
@@ -85,11 +102,17 @@ internal static class BrowserPanelTests
             PlayerTests.CheckPointSelection((Slider)browser.FindName("Transparency"), .5);
             if (Math.Abs(browser.Opacity - .65) > .01) throw new Exception("Opacity must apply to the complete browser panel.");
             Capture(browser, Path.Combine(output, "browser-video-panel.png"));
-            browser.Width = 460; browser.UpdateLayout(); Capture(browser, Path.Combine(output, "browser-video-panel-narrow.png"));
+            browser.Width = 460; browser.UpdateLayout(); await Task.Delay(250); Capture(browser, Path.Combine(output, "browser-video-panel-narrow.png"));
+            ((Expander)browser.FindName("NavigationPanel")).IsExpanded = true;
+            ((Expander)browser.FindName("TranscriptPanel")).IsExpanded = true;
+            browser.UpdateLayout(); await Task.Delay(250);
+            Capture(browser, Path.Combine(output, "browser-video-panel-expanded.png"));
+            if (((FrameworkElement)browser.FindName("BrowserHost")).ActualHeight < 100) throw new Exception("Expanded controls must leave usable page space.");
             Click(overlay, MouseButton.Right);
             if (browser.IsVisible || !player.IsPlaying) throw new Exception("Browser hide must leave video playing.");
             CheckActionEvents(output);
             Click(overlay, MouseButton.Right);
+            await browser.AddTabAsync("about:blank");
             Press(browser, "RecordVideoButton");
             await Task.Delay(500);
         }
@@ -101,6 +124,18 @@ internal static class BrowserPanelTests
         }
         if (Directory.GetFiles(clips, "*.mkv").Length != 3 || Directory.GetFiles(clips, "*.partial.mkv").Length != 0)
             throw new Exception("App close did not finalize the pending clip cleanly.");
+        if (preferences.Saved.BrowserTabs.Count != 2 || preferences.Saved.BrowserSelectedTab != 1)
+            throw new Exception("Immediate app close must save open browser tabs and active selection before disposal.");
+        var restoredBrowser = new FloatingBrowser(1, "about:blank", Path.Combine(output, "RestoredProfile"));
+        try
+        {
+            restoredBrowser.RestoreTabs(preferences.Saved.BrowserTabs, preferences.Saved.BrowserSelectedTab);
+            restoredBrowser.Show();
+            await restoredBrowser.Initialization.WaitAsync(TimeSpan.FromSeconds(25));
+            if (restoredBrowser.TabCount != 2 || restoredBrowser.SelectedTabIndex != 1 || !restoredBrowser.SessionReady)
+                throw new Exception("Saved browser tabs and selection failed to restore.");
+        }
+        finally { restoredBrowser.Shutdown(); }
         Console.WriteLine("Browser panel checks passed: independent left/right toggles, no-video guards, video-only recording with source audio, hide/show during recording, stop while paused, preserved position, full-panel opacity, responsive layout, and frame/text/record event wiring.");
     }
     private static void CheckActionEvents(string output)

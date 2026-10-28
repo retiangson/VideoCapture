@@ -37,13 +37,14 @@ internal static class PreferencesTests
                 Volume = 42, PictureFit = 1, BrowserOpacity = 0.55, MenuOpacity = 0.62,
                 SpeechVoice = "Test installed voice", SpeechRate = 2, SpeechVolume = 61, SpeechRegion = 1,
                 TranscriptionLanguage = "MS-1033-80-DESK",
+                BrowserTabs = ["https://chatgpt.com/", "https://example.com/"], BrowserSelectedTab = 1,
                 Playlist = [Path.Combine(folder, "not-connected-video.mp4")], PlaylistSelectedIndex = 0,
                 CaptureModes = new() { ["Missing test capture device"] = new(1920, 1080, 333333, "MJPG") }
             };
             await store.SaveAsync(settings);
             var restored = (await store.LoadAsync()).Preferences;
             if (restored.VideoDevice != settings.VideoDevice || restored.CaptureModes[settings.VideoDevice] != settings.CaptureModes[settings.VideoDevice] || restored.Volume != 42 ||
-                restored.MenuOpacity != 0.62 || restored.Playlist.Count != 1 || restored.SpeechVoice != settings.SpeechVoice || restored.SpeechRate != 2 || restored.SpeechVolume != 61 || restored.SpeechRegion != 1 || restored.TranscriptionLanguage != settings.TranscriptionLanguage)
+                restored.MenuOpacity != 0.62 || restored.Playlist.Count != 1 || restored.SpeechVoice != settings.SpeechVoice || restored.SpeechRate != 2 || restored.SpeechVolume != 61 || restored.SpeechRegion != 1 || restored.TranscriptionLanguage != settings.TranscriptionLanguage || !restored.BrowserTabs.SequenceEqual(settings.BrowserTabs) || restored.BrowserSelectedTab != 1)
                 throw new Exception("Settings file round trip failed.");
             await Task.WhenAll(Enumerable.Range(0, 8).Select(index => store.SaveAsync(settings with { Volume = index })));
             if ((await store.LoadAsync()).Warning is not null || Directory.GetFiles(folder, "*.tmp").Length != 0)
@@ -59,6 +60,9 @@ internal static class PreferencesTests
                 throw new Exception("Speech preferences must use safe defaults and bounded values.");
             if (normalized.Volume != 100 || normalized.PictureFit != 0 || normalized.BrowserOpacity != 0.3 || normalized.CaptureModes.Count != 0)
                 throw new Exception("Malformed preference values were not normalized.");
+            var browserNormalized = (new AppPreferences { BrowserTabs = ["javascript:alert(1)", "file:///C:/test", "https://example.com/", "about:blank"], BrowserSelectedTab = -3 }).Normalize();
+            if (!browserNormalized.BrowserTabs.SequenceEqual(["https://example.com/", "about:blank"]) || browserNormalized.BrowserSelectedTab != 0)
+                throw new Exception("Saved browser sessions must reject unsafe URLs and invalid selection.");
             await store.SaveAsync(settings);
             var window = new MainWindow(store, new MemoryPlaybackHistoryStore());
             var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -79,7 +83,7 @@ internal static class PreferencesTests
             await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var afterClose = (await store.LoadAsync()).Preferences;
             if (afterClose.Volume != 38 || afterClose.VideoDevice != settings.VideoDevice || afterClose.AudioDevice != settings.AudioDevice ||
-                afterClose.BrowserOpacity != 0.55 || afterClose.CaptureModes[settings.VideoDevice] != settings.CaptureModes[settings.VideoDevice])
+                !afterClose.BrowserTabs.SequenceEqual(settings.BrowserTabs) || afterClose.BrowserSelectedTab != 1 || afterClose.BrowserOpacity != 0.55 || afterClose.CaptureModes[settings.VideoDevice] != settings.CaptureModes[settings.VideoDevice])
                 throw new Exception("Immediate close did not flush changes or lost unavailable-device preferences.");
             Console.WriteLine("Preferences checks passed: defaults, JSON round trip, atomic concurrent writes, corrupt file, normalization, missing-device UI restore, immediate-close flush.");
         }

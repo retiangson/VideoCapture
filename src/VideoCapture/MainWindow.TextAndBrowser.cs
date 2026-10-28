@@ -55,6 +55,8 @@ public partial class MainWindow
         if (_browser is null)
         {
             _browser = BrowserFactory(_preferences.BrowserOpacity);
+            _browser.RestoreTabs(_preferences.BrowserTabs, _preferences.BrowserSelectedTab);
+            _browser.SessionChanged += (_, _) => QueuePreferencesSave();
             _browser.Owner = this;
             _browser.ScreenTextRequested += async (_, _) => await CopyScreenTextAsync();
             _browser.CopyVideoFrameRequested += async (_, _) => await CopyFrameAsync();

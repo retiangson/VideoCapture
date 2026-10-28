@@ -39,16 +39,29 @@ public partial class FloatingBrowser : Window
         CancelAudioButton.IsEnabled = capturing || processing;
         TranscriptText.IsReadOnly = capturing || processing;
     }
-    internal void SetTranscript(string text) { TranscriptText.Text = text; TranscriptPanel.IsExpanded = true; }
-    internal void SetTranscriptStatus(string text, bool expand = false) { TranscriptStatus.Text = text; if (expand) TranscriptPanel.IsExpanded = true; }
+    internal void SetTranscript(string text) => TranscriptText.Text = text;
+    internal void SetTranscriptStatus(string text) { TranscriptStatus.Text = text; TranscriptPanel.ToolTip = text; }
     private void AudioText_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
     private void CancelAudio_Click(object sender, RoutedEventArgs e) => CancelAudioRequested?.Invoke(this, EventArgs.Empty);
     private void CopyTranscript_Click(object sender, RoutedEventArgs e) => CopyTranscriptRequested?.Invoke(this, EventArgs.Empty);
     private void TranscriptLanguage_Changed(object sender, SelectionChangedEventArgs e) { if (!_updatingTranscriptLanguage) TranscriptLanguageRequested?.Invoke(this, EventArgs.Empty); }
     private void TranscriptText_Changed(object sender, TextChangedEventArgs e) { if (CopyTranscriptButton is not null) CopyTranscriptButton.IsEnabled = !string.IsNullOrWhiteSpace(TranscriptText.Text); }
-    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { MinHeight = 480; }
-    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { MinHeight = 300; }
+    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { MinHeight = 660; }
+    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { MinHeight = 400; }
     public event EventHandler? OpacityPreferenceChanged;
+    internal event EventHandler? SessionChanged;
+    private List<string> _restoreTabs = [];
+    private int _restoreSelected;
+    internal bool SessionReady { get; private set; }
+    internal List<string> SessionTabs => _tabs.Select(t => t.SavedAddress).ToList();
+    internal int SelectedTabIndex => Tabs.SelectedIndex;
+    internal void RestoreTabs(IEnumerable<string> addresses, int selected)
+    {
+        if (_started) throw new InvalidOperationException("Restore tabs before showing the browser.");
+        _restoreTabs = addresses.Where(url => url == "about:blank" || TryAddress(url, out _)).Take(32).ToList();
+        _restoreSelected = selected;
+    }
+    private void NotifySessionChanged() { if (SessionReady && !_disposed) SessionChanged?.Invoke(this, EventArgs.Empty); }
     private readonly List<BrowserTab> _tabs = [];
     private readonly string _initialAddress, _profileDirectory;
     private CoreWebView2Environment? _environment;
@@ -89,8 +102,15 @@ public partial class FloatingBrowser : Window
         {
             _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _profileDirectory);
             if (_disposed) return;
-            await AddTabAsync(_initialAddress);
-            if (!_disposed) NewTabButton.IsEnabled = true;
+            foreach (string address in _restoreTabs.Count > 0 ? _restoreTabs : [_initialAddress])
+            {
+                await AddTabAsync(address);
+                if (_disposed) return;
+            }
+            Tabs.SelectedIndex = Math.Clamp(_restoreSelected, 0, _tabs.Count - 1);
+            SessionReady = true;
+            NewTabButton.IsEnabled = true;
+            NotifySessionChanged();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (!_disposed) Feedback.Text = "Browser unavailable. Check Microsoft Edge WebView2 Runtime. " + ex.Message; }
@@ -104,7 +124,7 @@ public partial class FloatingBrowser : Window
             if (!TryAddress(address, out var uri)) throw new ArgumentException("Enter a valid HTTP or HTTPS address.", nameof(address));
             address = uri!.AbsoluteUri;
         }
-        var tab = new BrowserTab();
+        var tab = new BrowserTab { SavedAddress = address ?? "about:blank" };
         var header = new StackPanel { Orientation = Orientation.Horizontal };
         header.Children.Add(tab.Title);
         var close = new Button { Content = "×", Padding = new Thickness(0), Margin = new Thickness(5, 0, 0, 0), Width = 18, Height = 18, MinHeight = 18, FontSize = 11, ToolTip = "Close tab (Ctrl+W)", Focusable = false };
@@ -169,7 +189,13 @@ public partial class FloatingBrowser : Window
         };
         core.DocumentTitleChanged += (_, _) => UpdateTitle(tab);
         core.WindowCloseRequested += async (_, _) => await RunBrowserActionAsync(() => CloseTabAsync(tab.View));
-        core.SourceChanged += (_, _) => { if (tab == ActiveTab) UpdateNavigation(); };
+        core.SourceChanged += (_, _) =>
+        {
+            string source = core.Source;
+            tab.SavedAddress = source == "about:blank" ? source : TryAddress(source, out var uri) ? uri!.AbsoluteUri : HomeAddress;
+            NotifySessionChanged();
+            if (tab == ActiveTab) UpdateNavigation();
+        };
         core.HistoryChanged += (_, _) => { if (tab == ActiveTab) UpdateNavigation(); };
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
         core.DownloadStarting += (_, e) => { e.Cancel = true; SetFeedback(tab, "Downloads are not supported in the floating browser."); };
@@ -193,6 +219,7 @@ public partial class FloatingBrowser : Window
         ForwardButton.IsEnabled = core?.CanGoForward == true;
         Address.Text = core is null || core.Source.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ? "" : core.Source;
         Feedback.Text = ActiveTab?.Feedback ?? "Starting browser…";
+        NotifySessionChanged();
     }
     private void Tab_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -263,7 +290,7 @@ public partial class FloatingBrowser : Window
         if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
         if (e.Key == Key.T) { e.Handled = true; await RunBrowserActionAsync(async () => { await AddTabAsync(); }); }
         else if (e.Key == Key.W && ActiveBrowser is { } view) { e.Handled = true; await RunBrowserActionAsync(() => CloseTabAsync(view)); }
-        else if (e.Key == Key.L) { Address.Focus(); Address.SelectAll(); e.Handled = true; }
+        else if (e.Key == Key.L) { NavigationPanel.IsExpanded = true; Address.Focus(); Address.SelectAll(); e.Handled = true; }
         else if (e.Key == Key.Tab && Tabs.Items.Count > 0)
         {
             int direction = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
@@ -274,6 +301,7 @@ public partial class FloatingBrowser : Window
     internal void Shutdown()
     {
         _disposed = true;
+        SessionReady = false;
         foreach (var tab in _tabs.ToArray()) RemoveTab(tab);
         Close();
     }
@@ -284,5 +312,6 @@ public partial class FloatingBrowser : Window
         public TextBlock Title { get; } = new() { Text = "New tab", MaxWidth = 112, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         public string Feedback { get; set; } = "Starting tab…";
         public string? LocalPageUri { get; set; }
+        public string SavedAddress { get; set; } = "about:blank";
     }
 }
