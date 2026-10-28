@@ -176,6 +176,8 @@ public partial class FloatingBrowser : Window
             await tab.View.EnsureCoreWebView2Async(_environment);
             if (_disposed || !_tabs.Contains(tab)) return null;
             ConfigureTab(tab);
+            await BrowserPermissions.ResetOldMicrophoneDecisionsAsync(tab.View.CoreWebView2.Profile);
+            if (_disposed || !_tabs.Contains(tab)) return null;
             if (address is not null) tab.View.CoreWebView2.Navigate(address);
             UpdateNavigation();
             return tab.View;
@@ -232,7 +234,17 @@ public partial class FloatingBrowser : Window
             if (tab == ActiveTab) UpdateNavigation();
         };
         core.HistoryChanged += (_, _) => { if (tab == ActiveTab) UpdateNavigation(); };
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        core.PermissionRequested += (_, e) =>
+        {
+            // Do not persist a blanket allow: embedding ChatGPT in an unrelated page
+            // must not bypass the top-level-origin check on a later request.
+            e.SavesInProfile = false;
+            bool allow = !_disposed && _tabs.Contains(tab) && BrowserPermissions.AllowsMicrophone(e.PermissionKind, e.Uri, core.Source);
+            e.State = allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            if (e.PermissionKind == CoreWebView2PermissionKind.Microphone)
+                SetFeedback(tab, allow ? "ChatGPT microphone access allowed. Use the website's microphone controls to start or stop."
+                    : "Microphone access is available only to a ChatGPT page opened directly in this browser.");
+        };
         core.DownloadStarting += (_, e) => { e.Cancel = true; SetFeedback(tab, "Downloads are not supported in the floating browser."); };
         core.ProcessFailed += (_, e) => SetFeedback(tab, "Browser process failed: " + e.ProcessFailedKind + ". Reload or close this tab.");
     }

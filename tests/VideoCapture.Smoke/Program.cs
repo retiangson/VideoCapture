@@ -24,6 +24,13 @@ internal static class Program
                 return 0;
             }
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            if (args is ["--test-browser-microphone", var microphoneOutput])
+            {
+                var checks = BrowserMicrophoneTests.RunAsync(Path.GetFullPath(microphoneOutput));
+                PumpUntil(() => checks.IsCompleted, "browser microphone permission checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
             if (args is ["--test-transcription", var transcriptionOutput])
             {
                 var checks = TranscriptionTests.RunAsync(Path.GetFullPath(transcriptionOutput));
