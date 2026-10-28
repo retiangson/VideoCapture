@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using VideoCapture.Services;
 
 namespace VideoCapture;
 
@@ -13,6 +14,40 @@ public partial class FloatingBrowser : Window
     internal const string HomeAddress = "https://chatgpt.com/";
     public event EventHandler? ScreenTextRequested;
     public event EventHandler? CopyVideoFrameRequested, CopyVideoTextRequested, RecordVideoRequested;
+    public event EventHandler? AudioTextRequested, CancelAudioRequested, CopyTranscriptRequested, TranscriptLanguageRequested;
+    private bool _updatingTranscriptLanguage;
+    internal string Transcript => TranscriptText.Text;
+    internal string? TranscriptLanguageId => (TranscriptLanguage.SelectedItem as TranscriptionLanguage)?.Id;
+    internal void SetTranscriptLanguages(IReadOnlyList<TranscriptionLanguage> languages, string? selected)
+    {
+        _updatingTranscriptLanguage = true;
+        try
+        {
+            TranscriptLanguage.ItemsSource = languages;
+            TranscriptLanguage.SelectedItem = languages.FirstOrDefault(l => l.Id == selected) ?? languages.FirstOrDefault();
+        }
+        finally { _updatingTranscriptLanguage = false; }
+    }
+    internal void SetAudioState(bool canStart, bool capturing, bool processing, string elapsed)
+    {
+        AudioTextButton.IsEnabled = canStart;
+        AudioTextLabel.Text = capturing ? "Stop & transcribe · " + elapsed : processing ? "Transcribing…" : "Audio to text";
+        AudioTextButton.ToolTip = capturing ? "Finish the audio capture and recognize its speech" : processing ? "Recognizing captured audio locally; Cancel stops recognition"
+            : canStart ? "Capture only the video's spoken audio; no microphone or browser audio is included"
+            : "Requires a playing video with an audio track, an installed Windows speech language, and no active video recording";
+        TranscriptLanguage.IsEnabled = !capturing && !processing && TranscriptLanguage.Items.Count > 0;
+        CancelAudioButton.IsEnabled = capturing || processing;
+        TranscriptText.IsReadOnly = capturing || processing;
+    }
+    internal void SetTranscript(string text) { TranscriptText.Text = text; TranscriptPanel.IsExpanded = true; }
+    internal void SetTranscriptStatus(string text, bool expand = false) { TranscriptStatus.Text = text; if (expand) TranscriptPanel.IsExpanded = true; }
+    private void AudioText_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
+    private void CancelAudio_Click(object sender, RoutedEventArgs e) => CancelAudioRequested?.Invoke(this, EventArgs.Empty);
+    private void CopyTranscript_Click(object sender, RoutedEventArgs e) => CopyTranscriptRequested?.Invoke(this, EventArgs.Empty);
+    private void TranscriptLanguage_Changed(object sender, SelectionChangedEventArgs e) { if (!_updatingTranscriptLanguage) TranscriptLanguageRequested?.Invoke(this, EventArgs.Empty); }
+    private void TranscriptText_Changed(object sender, TextChangedEventArgs e) { if (CopyTranscriptButton is not null) CopyTranscriptButton.IsEnabled = !string.IsNullOrWhiteSpace(TranscriptText.Text); }
+    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { MinHeight = 480; }
+    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { MinHeight = 300; }
     public event EventHandler? OpacityPreferenceChanged;
     private readonly List<BrowserTab> _tabs = [];
     private readonly string _initialAddress, _profileDirectory;
@@ -72,7 +107,7 @@ public partial class FloatingBrowser : Window
         var tab = new BrowserTab();
         var header = new StackPanel { Orientation = Orientation.Horizontal };
         header.Children.Add(tab.Title);
-        var close = new Button { Content = "×", Padding = new Thickness(5, 0, 5, 0), Margin = new Thickness(8, 0, 0, 0), ToolTip = "Close tab (Ctrl+W)", Focusable = false };
+        var close = new Button { Content = "×", Padding = new Thickness(0), Margin = new Thickness(5, 0, 0, 0), Width = 18, Height = 18, MinHeight = 18, FontSize = 11, ToolTip = "Close tab (Ctrl+W)", Focusable = false };
         close.Click += async (_, e) => { e.Handled = true; await RunBrowserActionAsync(() => CloseTabAsync(tab.View)); };
         header.Children.Add(close);
         tab.Item.Header = header;
@@ -246,7 +281,7 @@ public partial class FloatingBrowser : Window
     {
         public TabItem Item { get; } = new();
         public WebView2CompositionControl View { get; } = new();
-        public TextBlock Title { get; } = new() { Text = "New tab", MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        public TextBlock Title { get; } = new() { Text = "New tab", MaxWidth = 112, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         public string Feedback { get; set; } = "Starting tab…";
         public string? LocalPageUri { get; set; }
     }

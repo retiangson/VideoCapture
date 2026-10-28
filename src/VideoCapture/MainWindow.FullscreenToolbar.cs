@@ -75,7 +75,7 @@ public partial class MainWindow
         long duration = media?.Player.Length ?? 0;
         _fullscreenToolbar?.SetProgress(duration > 0 ? 1000d * position / duration : 0,
             media?.IsLive == true ? "LIVE" : $"{FormatTime(position)} / {FormatTime(duration)}",
-            !_busy && !_closing && _localRecording is null && media is { IsLive: false } && duration > 0 && media.Player.IsSeekable);
+            !_busy && !_closing && _localRecording is null && !IsAudioCapturing && media is { IsLive: false } && duration > 0 && media.Player.IsSeekable);
         _fullscreenToolbar?.SetTransport(PauseButton.IsEnabled, _session?.Player.IsPlaying == true, StopButton.IsEnabled, PreviousButton.IsEnabled, NextButton.IsEnabled);
         if (_fullscreenToolbar is not null && _fullscreen)
         {
@@ -86,8 +86,9 @@ public partial class MainWindow
         if (_browser is not null)
         {
             _browser.SetVideoActions(!_busy && !_closing && CanCaptureFrame,
-                !_busy && !_closing && (IsVideoRecording || CanCaptureFrame && (_session?.IsLive == true || !IsClipSaving && _session?.Player.IsPlaying == true && _requestedPositionMs is null && _resumePositionMs is null)),
+                !_busy && !_closing && !IsAudioCapturing && (IsVideoRecording || CanCaptureFrame && (_session?.IsLive == true || !IsClipSaving && _session?.Player.IsPlaying == true && _requestedPositionMs is null && _resumePositionMs is null)),
                 IsVideoRecording, RecordingElapsed, IsClipSaving);
+            _browser.SetAudioState(!_busy && !_closing && (IsAudioCapturing || CanStartAudioCapture), IsAudioCapturing, _transcribing, FormatTime(_audioCaptureClock.ElapsedMilliseconds));
             GetWindowThreadProcessId(GetForegroundWindow(), out uint processId);
             _browser.Topmost = _fullscreen && processId == (uint)Environment.ProcessId;
         }

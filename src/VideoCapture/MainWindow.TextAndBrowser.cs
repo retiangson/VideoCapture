@@ -60,6 +60,15 @@ public partial class MainWindow
             _browser.CopyVideoFrameRequested += async (_, _) => await CopyFrameAsync();
             _browser.CopyVideoTextRequested += async (_, _) => await CopyVideoTextAsync();
             _browser.RecordVideoRequested += async (_, _) => await RunAsync(ToggleVideoRecordingCoreAsync);
+            _browser.AudioTextRequested += async (_, _) => await RunAsync(ToggleAudioCaptureAsync);
+            _browser.CancelAudioRequested += async (_, _) => await RunAsync(CancelAudioCaptureAsync);
+            _browser.CopyTranscriptRequested += async (_, _) => await CopyTranscriptAsync();
+            _browser.TranscriptLanguageRequested += (_, _) =>
+            {
+                _preferences = _preferences with { TranscriptionLanguage = _browser.TranscriptLanguageId };
+                QueuePreferencesSave();
+            };
+            _transcriptionLanguages = InitializeTranscriptionLanguagesAsync();
             _browser.OpacityPreferenceChanged += (_, _) => QueuePreferencesSave();
         }
         UpdateFullscreenToolbar();

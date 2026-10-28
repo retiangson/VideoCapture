@@ -71,7 +71,7 @@ public partial class MainWindow
     }
     private void SeekPlaybackTo(long positionMs)
     {
-        if (_busy || _closing || _localRecording is not null || _session is not { HasMedia: true, IsLive: false } session || !session.Player.IsSeekable) return;
+        if (_busy || _closing || _localRecording is not null || IsAudioCapturing || _session is not { HasMedia: true, IsLive: false } session || !session.Player.IsSeekable) return;
         _resumePositionMs = null;
         _resumingSavedPosition = false;
         _requestedPositionMs = Math.Clamp(positionMs, 0, Math.Max(0, session.Player.Length));

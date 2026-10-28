@@ -21,6 +21,7 @@ internal sealed record AppPreferences
     public int SpeechVolume { get; init; } = 85;
     public int SpeechRegion { get; init; }
     public bool ShowFullscreenProgress { get; init; } = true;
+    public string? TranscriptionLanguage { get; init; }
 
     internal AppPreferences Normalize() => this with
     {
@@ -30,6 +31,7 @@ internal sealed record AppPreferences
         BrowserOpacity = double.IsFinite(BrowserOpacity) ? Math.Clamp(BrowserOpacity, 0.3, 1) : 1,
         MenuOpacity = double.IsFinite(MenuOpacity) ? Math.Clamp(MenuOpacity, 0.35, 1) : 0.96,
         SpeechVoice = ValidName(SpeechVoice) ? SpeechVoice : null,
+        TranscriptionLanguage = ValidName(TranscriptionLanguage) ? TranscriptionLanguage : null,
         SpeechRate = Math.Clamp(SpeechRate, -5, 5),
         SpeechVolume = Math.Clamp(SpeechVolume, 0, 100),
         SpeechRegion = SpeechRegion is >= 0 and <= 2 ? SpeechRegion : 0,

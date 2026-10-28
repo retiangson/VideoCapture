@@ -16,6 +16,7 @@ public partial class MainWindow
 
     private async Task ToggleVideoRecordingCoreAsync()
     {
+        if (IsAudioCapturing) throw new InvalidOperationException("Finish capturing audio before starting a video recording.");
         if (_session is not { HasMedia: true } session) throw new InvalidOperationException("Start a video before recording.");
         if (!session.IsLive) { await ToggleLocalRecordingAsync(); return; }
         string? completed = session.RecordingPath;

@@ -131,6 +131,47 @@ in the captured image remain part of that source.
 Browser action/click checks (isolated browser profile and generated media):
 `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-panel artifacts/sample.mp4 artifacts/browser-panel-smoke`.
 
+Browser tabs use compact 24-pixel headers, shorter titles with ellipses/tooltips,
+and small close/new-tab buttons. Keyboard tab shortcuts remain available.
+
+### Video audio to text
+
+Open the browser panel and expand **Audio transcript** to choose an installed
+Windows speech-recognition language. Play a video with an audio track, choose
+**Audio to text**, then **Stop & transcribe** after the passage you want. Capture
+stops automatically after two minutes. The resulting transcript is editable;
+choose **Copy transcript** and paste with `Ctrl+V`. Cancelling, errors, or empty
+recognition preserve the previous transcript and do not overwrite the clipboard.
+
+Recognition uses local Windows desktop dictation through System.Speech. It
+needs a compatible installed Windows speech-recognition language, which is
+separate from text-to-speech voices. There is no account, cloud transcription
+request, or separate model download. Language selection is saved. Accents,
+music and background noise affect accuracy; review the text before pasting.
+Transcripts stay in memory until the app closes and survive browser hide/show.
+
+Only the selected video's audio is used, before playback-volume adjustment.
+Microphone input, browser audio, other desktop sound and synthesized subtitle
+reading are excluded. Local files are sampled from the marked playback range;
+the selected playback audio track is used. Live HDMI capture needs its audio
+input selected and briefly reconnects preview to start/finish an audio-only WAV
+capture. Source/seek changes and video recording are disabled while capturing
+audio. Playback and other actions are available again during recognition.
+
+Stop/end-of-file transcribes a pending passage. Cancel discards the current
+capture; closing the app cancels audio capture/recognition. Temporary PCM audio
+files are deleted after recognition/cancellation or shutdown; a device that is
+still releasing a file can defer deletion until shutdown. Recognition errors
+appear in the transcript panel. Device disconnects interrupt an active capture
+and require a new capture after recovery.
+
+Offline dictation tests use synthesized speech without playing it or accessing
+the microphone:
+`dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-transcription artifacts/transcription-smoke`.
+They also exercise source-audio extraction/tapping, silence, in-flight
+cancellation, compact tabs, pause preservation and editable transcripts. Set
+`VIDEOCAPTURE_TEST_CLIPBOARD=1` to verify copying and restore the prior clipboard.
+
 Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Closing the application closes the tabs; the next browser window starts at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Downloads and website permission requests remain disabled. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
 
 Overlay verification: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-overlays artifacts/overlay-smoke` checks OCR against known text/blank images, crop bounds, browser URI validation, initialization, DOM interaction, opacity property, and hide/show state. Set `VIDEOCAPTURE_TEST_CLIPBOARD=1` to check real text clipboard round-tripping (restoring prior contents) and desktop bitmap dimensions. `VIDEOCAPTURE_TEST_INPUT=1` additionally attempts native input in the test window; it fails safely if that window cannot gain foreground focus.
@@ -213,7 +254,8 @@ readable embedded text, the reader uses offline OCR of the visible video. Turn
 on subtitles on the source device for HDMI capture. The default OCR region is
 the bottom 35%; choose bottom 50% or the whole picture for other layouts. Image
 tracks selected in the app are enabled in the player so OCR can see them. Use
-**Fit** if **Fill** crops captions. This does not transcribe spoken audio.
+**Fit** if **Fill** crops captions. For spoken-audio transcription, use
+**Audio to text** in the browser panel.
 
 OCR currently recognizes English. It samples at most roughly once per second
 and requires two matching observations, so very brief captions can be missed;
