@@ -14,6 +14,8 @@ public partial class MainWindow
     private CancellationTokenSource? _transcriptionCancellation;
     private Task _transcriptionTask = Task.CompletedTask, _transcriptionLanguages = Task.CompletedTask;
     private bool _transcribing, _transcriptionLanguagesReady;
+    private CancellationTokenSource? _microphoneStop;
+    private bool IsMicrophoneListening => _microphoneStop is { IsCancellationRequested: false };
     private bool IsAudioCapturing => _audioCapture is not null;
     private bool IsSourceLocked => IsVideoRecording || IsAudioCapturing;
 
@@ -31,6 +33,9 @@ public partial class MainWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (!_closing) _browser?.SetTranscriptStatus("Windows speech recognition is unavailable: " + ex.Message); }
     }
+    private bool CanStartSelectedAudio => _browser?.MicrophoneSelected == true
+        ? !_closing && _transcriptionLanguagesReady && !_transcribing && !IsAudioCapturing
+        : CanStartAudioCapture;
     private bool CanStartAudioCapture => !_closing && _transcriptionLanguagesReady && !_transcribing && !IsVideoRecording &&
         _session is { HasMedia: true } session && session.Player.IsPlaying && session.Player.AudioTrack >= 0 && session.Player.AudioTrackDescription.Any(t => t.Id >= 0) &&
         _requestedPositionMs is null && _resumePositionMs is null;
@@ -42,6 +47,20 @@ public partial class MainWindow
     }
     private async Task ToggleAudioCaptureAsync()
     {
+        if (IsMicrophoneListening) { _microphoneStop!.Cancel(); return; }
+        if (_browser?.MicrophoneSelected == true)
+        {
+            if (!CanStartSelectedAudio || _browser.TranscriptLanguageId is not { } microphoneLanguage)
+                throw new InvalidOperationException("Choose an installed Windows speech language before starting the microphone.");
+            _transcriptionCancellation?.Dispose();
+            _transcriptionCancellation = new();
+            _microphoneStop = new(TimeSpan.FromSeconds(AudioTranscription.MaximumSeconds));
+            _transcribing = true;
+            _audioCaptureClock.Restart();
+            _browser.SetTranscriptStatus("Listening to the default Windows microphone. Click Stop & transcribe when finished (maximum 2 minutes).");
+            _transcriptionTask = TranscribeMicrophoneAsync(microphoneLanguage, _microphoneStop.Token, _transcriptionCancellation.Token);
+            return;
+        }
         if (_audioCapture is not null) { await FinishAudioCaptureAsync(true); return; }
         if (!CanStartAudioCapture || _browser?.TranscriptLanguageId is not { } language || _session is not { } session)
             throw new InvalidOperationException("Play a video with an audio track, choose a Windows speech language, and stop video recording before capturing audio.");
@@ -53,6 +72,25 @@ public partial class MainWindow
         catch { _audioCapture = null; DeleteUnusedAudioFiles(); throw; }
         _audioCaptureClock.Restart();
         _browser.SetTranscriptStatus("Capturing video audio only. Click Stop & transcribe when finished (maximum 2 minutes).");
+    }
+    private async Task TranscribeMicrophoneAsync(string language, CancellationToken stop, CancellationToken token)
+    {
+        try
+        {
+            string text = await AudioTranscription.RecognizeMicrophoneAsync(language, stop, token);
+            if (_closing || token.IsCancellationRequested) return;
+            if (string.IsNullOrWhiteSpace(text)) _browser?.SetTranscriptStatus("No clear microphone speech was recognized. Check the default Windows input device and microphone privacy permissions. Previous transcript was kept.");
+            else { _browser?.SetTranscript(text); _browser?.SetTranscriptStatus("Microphone transcript ready. Review it, then choose Copy transcript."); }
+        }
+        catch (OperationCanceledException) { if (!_closing) _browser?.SetTranscriptStatus("Microphone transcription cancelled. Previous transcript was kept."); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { if (!_closing) _browser?.SetTranscriptStatus("Could not transcribe the microphone. Check Windows input settings and microphone permissions. " + ex.Message); }
+        finally
+        {
+            _transcribing = false;
+            _microphoneStop?.Dispose(); _microphoneStop = null;
+            if (!_closing) _ = Dispatcher.BeginInvoke(UpdateControls);
+        }
     }
     private async Task FinishAudioCaptureAsync(bool restartLive)
     {
@@ -124,6 +162,7 @@ public partial class MainWindow
     }
     private async Task TickAudioCaptureAsync()
     {
+        if (IsMicrophoneListening && _audioCaptureClock.Elapsed.TotalSeconds >= AudioTranscription.MaximumSeconds) _microphoneStop!.Cancel();
         if (IsAudioCapturing && _audioCaptureClock.Elapsed.TotalSeconds >= AudioTranscription.MaximumSeconds)
             await RunAsync(() => FinishAudioCaptureAsync(true), showError: false);
     }

@@ -7,11 +7,16 @@
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Border Background="#18212C" BorderBrush="#65768B" BorderThickness="1" CornerRadius="7" Padding="7">
   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-   <DockPanel Margin="0,0,0,7" MouseLeftButtonDown="Drag_MouseDown">
-    <Button Content="Hide (Ctrl+Shift+B)" DockPanel.Dock="Right" Click="Hide_Click" Padding="8,4"/>
-    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="12,0">
+   <DockPanel x:Name="BrowserTitleBar" Background="Transparent" Margin="0,0,0,7" MouseLeftButtonDown="Drag_MouseDown" PreviewMouseWheel="TitleBar_MouseWheel" ToolTip="Scroll to adjust panel opacity; double-click the title for fullscreen">
+    <Button Content="×" DockPanel.Dock="Right" Click="Hide_Click" Padding="0" Width="26" Height="26" MinHeight="26" ToolTip="Hide (Ctrl+Shift+B)"/>
+    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+     <Button x:Name="MinimizeButton" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Click="Minimize_Click" Width="26" Height="26" MinHeight="26" Padding="0" ToolTip="Minimize"/>
+     <Button x:Name="MaximizeButton" Content="&#xE922;" FontFamily="Segoe MDL2 Assets" Click="Maximize_Click" Width="26" Height="26" MinHeight="26" Padding="0" ToolTip="Maximize / restore"/>
+     <Button x:Name="BrowserFullscreenButton" Content="&#xE740;" FontFamily="Segoe MDL2 Assets" Click="Fullscreen_Click" Width="26" Height="26" MinHeight="26" Padding="0" ToolTip="Fullscreen / restore (F11)"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="6,0">
      <TextBlock Text="Panel opacity" Foreground="White" VerticalAlignment="Center" Margin="0,0,7,0"/>
-     <Slider x:Name="Transparency" Width="110" Minimum="0.3" Maximum="1" Value="1" SmallChange="0.01" LargeChange="0.1" ValueChanged="Opacity_Changed" VerticalAlignment="Center" ToolTip="Transparency applies to the browser and all controls; everything remains clickable"/>
+     <Slider x:Name="Transparency" Width="80" Minimum="0.3" Maximum="1" Value="1" SmallChange="0.01" LargeChange="0.1" ValueChanged="Opacity_Changed" VerticalAlignment="Center" ToolTip="Transparency applies to the browser and all controls; everything remains clickable"/>
     </StackPanel>
     <TextBlock Text="⋮⋮  Floating browser" Foreground="White" FontWeight="SemiBold" Padding="6" Cursor="SizeAll" TextTrimming="CharacterEllipsis"/>
    </DockPanel>
@@ -20,17 +25,21 @@
      <Button x:Name="CopyVideoFrameButton" IsEnabled="False" Click="CopyVideoFrame_Click" ToolTip="Copy the video picture to the clipboard"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock Text="Copy frame"/></StackPanel></Button>
      <Button x:Name="RecordVideoButton" IsEnabled="False" Click="RecordVideo_Click" Background="#9B344E" BorderBrush="#B64662"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordVideoLabel" Text="Record video"/></StackPanel></Button>
      <Button x:Name="CopyVideoTextButton" IsEnabled="False" Click="CopyVideoText_Click" ToolTip="Recognize text from the video and copy it"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock Text="Copy video text"/></StackPanel></Button>
-     <Button x:Name="AudioTextButton" IsEnabled="False" Click="AudioText_Click" ToolTipService.ShowOnDisabled="True" ToolTip="Capture the video's spoken audio, then convert it to editable text"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock x:Name="AudioTextLabel" Text="Audio to text"/></StackPanel></Button>
+     <Button x:Name="AudioTextButton" Click="AudioText_Click" ToolTipService.ShowOnDisabled="True" ToolTip="Show or hide audio transcription"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock x:Name="AudioTextLabel" Text="Audio to text"/></StackPanel></Button>
      <TextBlock x:Name="VideoRecordingTime" Foreground="#FF91AC" VerticalAlignment="Center" Margin="5,0,0,0"/>
     </WrapPanel>
     <TextBlock x:Name="VideoFeedback" Text="Video only · browser and other windows are excluded" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="2,6,2,0"/>
-    <Expander x:Name="TranscriptPanel" Header="Audio transcript" Foreground="#C1CEDD" FontSize="11" Margin="2,6,2,0" Expanded="TranscriptPanel_Expanded" Collapsed="TranscriptPanel_Collapsed"><StackPanel Margin="0,6,0,0">
+    <Expander x:Name="TranscriptPanel" Visibility="Collapsed" Header="Audio transcript" Foreground="#C1CEDD" FontSize="11" Margin="2,6,2,0" Expanded="TranscriptPanel_Expanded" Collapsed="TranscriptPanel_Collapsed"><StackPanel Margin="0,6,0,0">
+     <WrapPanel>
+      <ComboBox x:Name="TranscriptSource" Width="150" Height="28" MinHeight="28" Margin="0,0,6,5" SelectedIndex="0" SelectionChanged="TranscriptSource_Changed" ToolTip="Audio source for transcription"><ComboBoxItem Content="Video audio"/><ComboBoxItem Content="Microphone"/></ComboBox>
+      <Button x:Name="StartAudioButton" Content="Start capture" IsEnabled="False" Click="AudioStart_Click" MinHeight="28" Padding="8,4" Margin="0,0,6,5"/>
+     </WrapPanel>
      <WrapPanel><ComboBox x:Name="TranscriptLanguage" Width="190" Height="28" MinHeight="28" Margin="0,0,6,5" SelectionChanged="TranscriptLanguage_Changed" IsEnabled="False" ToolTip="Installed Windows speech-recognition language"/>
       <Button x:Name="CopyTranscriptButton" Content="Copy transcript" IsEnabled="False" Click="CopyTranscript_Click" MinHeight="28" Padding="8,4" Margin="0,0,6,5"/>
       <Button x:Name="CancelAudioButton" Content="Cancel" IsEnabled="False" Click="CancelAudio_Click" MinHeight="28" Padding="8,4" Margin="0,0,0,5"/>
      </WrapPanel>
      <TextBox x:Name="TranscriptText" Height="75" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#172236" Foreground="#E8EEF7" BorderBrush="#344157" Padding="6" FontSize="12" TextChanged="TranscriptText_Changed" ToolTip="Review and correct the transcript, then copy it"/>
-     <TextBlock x:Name="TranscriptStatus" Text="Offline Windows dictation · video audio only · up to 2 minutes" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
+     <TextBlock x:Name="TranscriptStatus" Text="Offline Windows dictation · choose video audio or microphone · up to 2 minutes" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
     </StackPanel></Expander>
    </StackPanel></Border>
    <Expander x:Name="NavigationPanel" Grid.Row="3" Header="Navigation · address and history" Foreground="#C1CEDD" FontSize="11" Margin="2,6,2,6">

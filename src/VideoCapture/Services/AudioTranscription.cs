@@ -48,12 +48,20 @@ internal static class AudioTranscription
         if (await Task.Run(() => PlaybackFile.Read(source.Path), token) != source) throw new IOException("The video file changed during audio extraction.");
     }
 
-    public static Task<string> RecognizeAsync(string wave, string recognizerId, CancellationToken token) => Task.Run(async () =>
+    public static Task<string> RecognizeAsync(string wave, string recognizerId, CancellationToken token) =>
+        RecognizeInputAsync(wave, recognizerId, CancellationToken.None, token);
+
+    public static Task<string> RecognizeMicrophoneAsync(string recognizerId, CancellationToken stop, CancellationToken token) =>
+        RecognizeInputAsync(null, recognizerId, stop, token);
+
+    // A graceful stop keeps recognized speech; cancellation discards the in-flight result.
+    private static Task<string> RecognizeInputAsync(string? wave, string recognizerId, CancellationToken stop, CancellationToken token) => Task.Run(async () =>
     {
         token.ThrowIfCancellationRequested();
         using var recognizer = new SpeechRecognitionEngine(recognizerId);
         recognizer.LoadGrammar(new DictationGrammar());
-        recognizer.SetInputToWaveFile(wave);
+        if (wave is null) recognizer.SetInputToDefaultAudioDevice();
+        else recognizer.SetInputToWaveFile(wave);
         var text = new List<string>();
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         recognizer.SpeechRecognized += (_, e) =>
@@ -64,13 +72,18 @@ internal static class AudioTranscription
         recognizer.RecognizeCompleted += (_, e) =>
         {
             if (e.Error is { } error) completed.TrySetException(error);
-            else if (e.Cancelled || token.IsCancellationRequested) completed.TrySetCanceled();
+            else if (token.IsCancellationRequested || (e.Cancelled && !stop.IsCancellationRequested)) completed.TrySetCanceled();
             else completed.TrySetResult();
         };
         recognizer.RecognizeAsync(RecognizeMode.Multiple);
         using var registration = token.Register(() =>
         {
             try { recognizer.RecognizeAsyncCancel(); }
+            catch (InvalidOperationException) { }
+        });
+        using var stopRegistration = stop.Register(() =>
+        {
+            try { recognizer.RecognizeAsyncStop(); }
             catch (InvalidOperationException) { }
         });
         try { await completed.Task.WaitAsync(TimeSpan.FromMinutes(3)); }

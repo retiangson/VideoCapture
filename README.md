@@ -132,13 +132,11 @@ Browser action/click checks (isolated browser profile and generated media):
 `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-panel artifacts/sample.mp4 artifacts/browser-panel-smoke`.
 
 Browser tabs use compact 24-pixel headers, shorter titles with ellipses/tooltips,
-and small close/new-tab buttons. Tabs and panel opacity stay above the page; capture tools and navigation sit below it. Navigation and Audio transcript start collapsed and open only when clicked (Ctrl+L also opens navigation). Transcript updates never force the panel open. Keyboard tab shortcuts remain available.
+and small close/new-tab buttons. Tabs and panel opacity stay above the page; capture tools and navigation sit below it. Navigation starts collapsed (Ctrl+L also opens it). The Audio transcript section is hidden until **Audio to text** is clicked; clicking the same button again hides it without stopping capture or recognition. Transcript updates never force the panel open. Keyboard tab shortcuts remain available.
 
 ### Video audio to text
 
-Open the browser panel and expand **Audio transcript** to choose an installed
-Windows speech-recognition language. Play a video with an audio track, choose
-**Audio to text**, then **Stop & transcribe** after the passage you want. Capture
+Open **Audio to text** to choose a source and installed Windows speech-recognition language. Select **Video audio** for the playing video or **Microphone** for the default Windows input device (video playback is optional). Choose **Start capture**, then **Stop & transcribe** after the passage you want. Capture
 stops automatically after two minutes. The resulting transcript is editable;
 choose **Copy transcript** and paste with `Ctrl+V`. Cancelling, errors, or empty
 recognition preserve the previous transcript and do not overwrite the clipboard.
@@ -150,9 +148,7 @@ request, or separate model download. Language selection is saved. Accents,
 music and background noise affect accuracy; review the text before pasting.
 Transcripts stay in memory until the app closes and survive browser hide/show.
 
-Only the selected video's audio is used, before playback-volume adjustment.
-Microphone input, browser audio, other desktop sound and synthesized subtitle
-reading are excluded. Local files are sampled from the marked playback range;
+**Video audio** uses only the selected video's source audio, before playback-volume adjustment. Microphone input, browser audio, other desktop sound and synthesized subtitle reading are excluded from that source. **Microphone** opens the default Windows microphone only after Start capture; it recognizes locally without saving an audio recording. It stops after two minutes, on Stop & transcribe, Cancel, or app close. Windows microphone privacy permissions and a working default input device are required; failures appear in the transcript panel. The source selection is remembered. Local files are sampled from the marked playback range;
 the selected playback audio track is used. Live HDMI capture needs its audio
 input selected and briefly reconnects preview to start/finish an audio-only WAV
 capture. Source/seek changes and video recording are disabled while capturing
@@ -168,11 +164,12 @@ and require a new capture after recovery.
 Offline dictation tests use synthesized speech without playing it or accessing
 the microphone:
 `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-transcription artifacts/transcription-smoke`.
+Set `VIDEOCAPTURE_TEST_MICROPHONE=1` to additionally exercise the actual default microphone briefly (start, graceful stop, cancellation/release, and no-video capture); its transcript is not saved or printed.
 They also exercise source-audio extraction/tapping, silence, in-flight
 cancellation, compact tabs, pause preservation and editable transcripts. Set
 `VIDEOCAPTURE_TEST_CLIPBOARD=1` to verify copying and restore the prior clipboard.
 
-Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Normal app close saves up to 32 HTTP/HTTPS tab addresses and the active tab; reopening the browser restores them on demand. Restarting reloads pages and does not restore form drafts or navigation history. Tab URLs are stored locally in settings.json. New sessions without saved tabs start at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Downloads and website permission requests remain disabled. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
+Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Normal app close saves up to 32 HTTP/HTTPS tab addresses and the active tab; reopening the browser restores them on demand. Restarting reloads pages and does not restore form drafts or navigation history. Tab URLs are stored locally in settings.json. New sessions without saved tabs start at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. Double-click the browser title bar or press F11 to enter/exit full-monitor fullscreen; Esc exits it. Buttons beside panel opacity provide minimize, maximize/restore, and fullscreen/restore. Scrolling over the browser top bar adjusts whole-panel opacity by 5 percentage points per wheel notch, clamped to 30–100%; scrolling over web content is unchanged. Page double-clicks keep their normal website behavior. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Downloads and website permission requests remain disabled. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
 
 Overlay verification: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-overlays artifacts/overlay-smoke` checks OCR against known text/blank images, crop bounds, browser URI validation, initialization, DOM interaction, opacity property, and hide/show state. Set `VIDEOCAPTURE_TEST_CLIPBOARD=1` to check real text clipboard round-tripping (restoring prior contents) and desktop bitmap dimensions. `VIDEOCAPTURE_TEST_INPUT=1` additionally attempts native input in the test window; it fails safely if that window cannot gain foreground focus.
 

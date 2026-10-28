@@ -81,9 +81,14 @@ internal static class TranscriptionTests
             browser.UpdateLayout();
             var tabs = (TabControl)browser.FindName("Tabs");
             if (((TabItem)tabs.Items[0]).ActualHeight > 28 || ((Button)browser.FindName("NewTabButton")).ActualHeight > 25) throw new Exception("Browser tab header is not compact.");
-            await window.OpenFileAsync(multiTrack);
-            await WaitAsync(() => ((Button)browser.FindName("AudioTextButton")).IsEnabled, "source audio action");
             Press(browser, "AudioTextButton");
+            if (!((Expander)browser.FindName("TranscriptPanel")).IsVisible) throw new Exception("Audio to text must reveal the transcript panel.");
+            Press(browser, "AudioTextButton");
+            if (((Expander)browser.FindName("TranscriptPanel")).IsVisible) throw new Exception("Audio to text must hide the transcript panel.");
+            Press(browser, "AudioTextButton");
+            await window.OpenFileAsync(multiTrack);
+            await WaitAsync(() => ((Button)browser.FindName("StartAudioButton")).IsEnabled, "source audio action");
+            Press(browser, "StartAudioButton");
             if (((Slider)window.FindName("Seek")).IsEnabled || ((Button)window.FindName("OpenButton")).IsEnabled || ((Button)browser.FindName("RecordVideoButton")).IsEnabled)
                 throw new Exception("Audio capture must lock the source and conflicting recording actions.");
             await Task.Delay(6400);
@@ -91,7 +96,7 @@ internal static class TranscriptionTests
             var player = ((VideoView)window.FindName("GpuVideo")).MediaPlayer!;
             await WaitAsync(() => player.State == VLCState.Paused, "pause during source audio capture");
             long pausedAt = player.Time;
-            Press(browser, "AudioTextButton");
+            Press(browser, "StartAudioButton");
             await WaitAsync(() => browser.Transcript.Contains("quick brown fox", StringComparison.OrdinalIgnoreCase), "UI audio transcript");
             if (Math.Abs(player.Time - pausedAt) > 1000 || player.State != VLCState.Paused) throw new Exception("Transcription moved or resumed the video.");
             var transcript = (TextBox)browser.FindName("TranscriptText");
@@ -109,11 +114,31 @@ internal static class TranscriptionTests
             }
             string previousTranscript = browser.Transcript;
             Press(window, "PauseButton");
-            await WaitAsync(() => ((Button)browser.FindName("AudioTextButton")).IsEnabled, "resume before cancel test");
-            Press(browser, "AudioTextButton");
+            await WaitAsync(() => ((Button)browser.FindName("StartAudioButton")).IsEnabled, "resume before cancel test");
+            Press(browser, "StartAudioButton");
             Press(browser, "CancelAudioButton");
             await WaitAsync(() => ((Button)window.FindName("OpenButton")).IsEnabled && !((Button)browser.FindName("CancelAudioButton")).IsEnabled, "cancel capture");
             if (browser.Transcript != previousTranscript) throw new Exception("Cancel lost the existing transcript.");
+            if (Environment.GetEnvironmentVariable("VIDEOCAPTURE_TEST_MICROPHONE") == "1")
+            {
+                Press(window, "StopButton");
+                browser.SetMicrophoneSource(true);
+                await WaitAsync(() => ((Button)browser.FindName("StartAudioButton")).IsEnabled, "microphone available without video");
+                Press(browser, "StartAudioButton");
+                await Task.Delay(750);
+                if (!((Button)browser.FindName("CancelAudioButton")).IsEnabled || ((ComboBox)browser.FindName("TranscriptSource")).IsEnabled)
+                    throw new Exception("Microphone capture failed or did not lock its source selector: " + ((TextBlock)browser.FindName("TranscriptStatus")).Text);
+                Press(browser, "AudioTextButton");
+                if (((Expander)browser.FindName("TranscriptPanel")).IsVisible || !((Button)browser.FindName("CancelAudioButton")).IsEnabled)
+                    throw new Exception("Hiding the transcript must leave capture active.");
+                Press(browser, "AudioTextButton");
+                Press(browser, "CancelAudioButton");
+                await WaitAsync(() => ((ComboBox)browser.FindName("TranscriptSource")).IsEnabled, "microphone cancellation and release");
+                if (browser.Transcript != previousTranscript) throw new Exception("Microphone cancellation changed the previous transcript.");
+                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(750));
+                await AudioTranscription.RecognizeMicrophoneAsync(english.Id, stop.Token, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+                Console.WriteLine("Default microphone checks passed: input opened, graceful stop, cancellation/release, no-video capture, hidden-panel capture, source lock and previous transcript preservation.");
+            }
             browser.UpdateLayout();
             var image = new RenderTargetBitmap((int)browser.ActualWidth, (int)browser.ActualHeight, 96, 96, PixelFormats.Pbgra32); image.Render(browser);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image)); using (var file = File.Create(Path.Combine(output, "audio-transcript-panel.png"))) png.Save(file);

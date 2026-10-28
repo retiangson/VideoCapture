@@ -88,7 +88,7 @@ public partial class MainWindow
             _browser.SetVideoActions(!_busy && !_closing && CanCaptureFrame,
                 !_busy && !_closing && !IsAudioCapturing && (IsVideoRecording || CanCaptureFrame && (_session?.IsLive == true || !IsClipSaving && _session?.Player.IsPlaying == true && _requestedPositionMs is null && _resumePositionMs is null)),
                 IsVideoRecording, RecordingElapsed, IsClipSaving);
-            _browser.SetAudioState(!_busy && !_closing && (IsAudioCapturing || CanStartAudioCapture), IsAudioCapturing, _transcribing, FormatTime(_audioCaptureClock.ElapsedMilliseconds));
+            _browser.SetAudioState(!_busy && !_closing && (IsAudioCapturing || IsMicrophoneListening || CanStartSelectedAudio), IsAudioCapturing || IsMicrophoneListening, _transcribing && !IsMicrophoneListening, FormatTime(_audioCaptureClock.ElapsedMilliseconds));
             GetWindowThreadProcessId(GetForegroundWindow(), out uint processId);
             _browser.Topmost = _fullscreen && processId == (uint)Environment.ProcessId;
         }

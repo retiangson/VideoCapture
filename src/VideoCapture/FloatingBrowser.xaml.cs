@@ -16,6 +16,9 @@ public partial class FloatingBrowser : Window
     public event EventHandler? CopyVideoFrameRequested, CopyVideoTextRequested, RecordVideoRequested;
     public event EventHandler? AudioTextRequested, CancelAudioRequested, CopyTranscriptRequested, TranscriptLanguageRequested;
     private bool _updatingTranscriptLanguage;
+    internal bool MicrophoneSelected => TranscriptSource.SelectedIndex == 1;
+    internal void SetMicrophoneSource(bool microphone) => TranscriptSource.SelectedIndex = microphone ? 1 : 0;
+    internal event EventHandler? TranscriptSourceRequested;
     internal string Transcript => TranscriptText.Text;
     internal string? TranscriptLanguageId => (TranscriptLanguage.SelectedItem as TranscriptionLanguage)?.Id;
     internal void SetTranscriptLanguages(IReadOnlyList<TranscriptionLanguage> languages, string? selected)
@@ -30,24 +33,33 @@ public partial class FloatingBrowser : Window
     }
     internal void SetAudioState(bool canStart, bool capturing, bool processing, string elapsed)
     {
-        AudioTextButton.IsEnabled = canStart;
-        AudioTextLabel.Text = capturing ? "Stop & transcribe · " + elapsed : processing ? "Transcribing…" : "Audio to text";
-        AudioTextButton.ToolTip = capturing ? "Finish the audio capture and recognize its speech" : processing ? "Recognizing captured audio locally; Cancel stops recognition"
-            : canStart ? "Capture only the video's spoken audio; no microphone or browser audio is included"
-            : "Requires a playing video with an audio track, an installed Windows speech language, and no active video recording";
+        StartAudioButton.IsEnabled = canStart;
+        StartAudioButton.Content = capturing ? "Stop & transcribe · " + elapsed : processing ? "Transcribing…" : "Start capture";
+        AudioTextLabel.Text = capturing ? "Audio to text · capturing" : processing ? "Audio to text · processing" : "Audio to text";
+        StartAudioButton.ToolTip = capturing ? "Stop and transcribe the captured audio" : MicrophoneSelected
+            ? "Listen to the default Windows microphone using offline dictation" : "Capture the playing video's audio only";
+        TranscriptSource.IsEnabled = !capturing && !processing;
         TranscriptLanguage.IsEnabled = !capturing && !processing && TranscriptLanguage.Items.Count > 0;
         CancelAudioButton.IsEnabled = capturing || processing;
         TranscriptText.IsReadOnly = capturing || processing;
     }
     internal void SetTranscript(string text) => TranscriptText.Text = text;
     internal void SetTranscriptStatus(string text) { TranscriptStatus.Text = text; TranscriptPanel.ToolTip = text; }
-    private void AudioText_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
+    private void AudioText_Click(object sender, RoutedEventArgs e)
+    {
+        bool show = TranscriptPanel.Visibility != Visibility.Visible;
+        TranscriptPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptPanel.IsExpanded = show;
+        if (!show && !IsBrowserFullscreen) MinHeight = 400;
+    }
+    private void AudioStart_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
+    private void TranscriptSource_Changed(object sender, SelectionChangedEventArgs e) => TranscriptSourceRequested?.Invoke(this, EventArgs.Empty);
     private void CancelAudio_Click(object sender, RoutedEventArgs e) => CancelAudioRequested?.Invoke(this, EventArgs.Empty);
     private void CopyTranscript_Click(object sender, RoutedEventArgs e) => CopyTranscriptRequested?.Invoke(this, EventArgs.Empty);
     private void TranscriptLanguage_Changed(object sender, SelectionChangedEventArgs e) { if (!_updatingTranscriptLanguage) TranscriptLanguageRequested?.Invoke(this, EventArgs.Empty); }
     private void TranscriptText_Changed(object sender, TextChangedEventArgs e) { if (CopyTranscriptButton is not null) CopyTranscriptButton.IsEnabled = !string.IsNullOrWhiteSpace(TranscriptText.Text); }
-    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { MinHeight = 660; }
-    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { MinHeight = 400; }
+    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { if (!IsBrowserFullscreen) MinHeight = 660; }
+    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { if (!IsBrowserFullscreen) MinHeight = 400; }
     public event EventHandler? OpacityPreferenceChanged;
     internal event EventHandler? SessionChanged;
     private List<string> _restoreTabs = [];
@@ -91,6 +103,7 @@ public partial class FloatingBrowser : Window
         _initialAddress = initialAddress;
         _profileDirectory = profileDirectory;
         InitializeComponent();
+        StateChanged += (_, _) => UpdateWindowButtons();
         Transparency.Value = Math.Clamp(opacity, 0.3, 1);
         Loaded += (_, _) => { if (!_started) { _started = true; Initialization = InitializeAsync(); } };
         Closing += (_, e) => { if (!_disposed) { e.Cancel = true; Hide(); } };
@@ -274,14 +287,26 @@ public partial class FloatingBrowser : Window
     private void Forward_Click(object sender, RoutedEventArgs e) { if (ActiveBrowser?.CoreWebView2?.CanGoForward == true) ActiveBrowser.CoreWebView2.GoForward(); }
     private void Reload_Click(object sender, RoutedEventArgs e) => ActiveBrowser?.CoreWebView2?.Reload();
     private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
+    private void TitleBar_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        Transparency.Value = Math.Clamp(Transparency.Value + e.Delta / 120d * 0.05, Transparency.Minimum, Transparency.Maximum);
+        e.Handled = true;
+    }
     private void Opacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         Opacity = Math.Clamp(e.NewValue, 0.3, 1);
         OpacityPreferenceChanged?.Invoke(this, EventArgs.Empty);
     }
-    private void Drag_MouseDown(object sender, MouseButtonEventArgs e) { if (e.OriginalSource is TextBlock && e.LeftButton == MouseButtonState.Pressed) DragMove(); }
+    private void Drag_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not TextBlock || e.LeftButton != MouseButtonState.Pressed) return;
+        if (e.ClickCount == 2) { SetBrowserFullscreen(!IsBrowserFullscreen); e.Handled = true; }
+        else if (!IsBrowserFullscreen && WindowState == WindowState.Normal) DragMove();
+    }
     private async void Browser_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F11) { SetBrowserFullscreen(!IsBrowserFullscreen); e.Handled = true; return; }
+        if (e.Key == Key.Escape && IsBrowserFullscreen) { SetBrowserFullscreen(false); e.Handled = true; return; }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             if (e.Key == Key.B) { Hide(); e.Handled = true; return; }

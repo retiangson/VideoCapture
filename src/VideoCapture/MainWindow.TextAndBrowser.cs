@@ -58,6 +58,13 @@ public partial class MainWindow
             _browser.RestoreTabs(_preferences.BrowserTabs, _preferences.BrowserSelectedTab);
             _browser.SessionChanged += (_, _) => QueuePreferencesSave();
             _browser.Owner = this;
+            _browser.SetMicrophoneSource(_preferences.TranscriptionMicrophone);
+            _browser.TranscriptSourceRequested += (_, _) =>
+            {
+                _preferences = _preferences with { TranscriptionMicrophone = _browser.MicrophoneSelected };
+                QueuePreferencesSave();
+                UpdateControls();
+            };
             _browser.ScreenTextRequested += async (_, _) => await CopyScreenTextAsync();
             _browser.CopyVideoFrameRequested += async (_, _) => await CopyFrameAsync();
             _browser.CopyVideoTextRequested += async (_, _) => await CopyVideoTextAsync();

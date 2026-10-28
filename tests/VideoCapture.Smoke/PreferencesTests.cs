@@ -36,7 +36,7 @@ internal static class PreferencesTests
                 VideoDevice = "Missing test capture device", AudioDevice = "Missing test audio", SoftwarePreview = true,
                 Volume = 42, PictureFit = 1, BrowserOpacity = 0.55, MenuOpacity = 0.62,
                 SpeechVoice = "Test installed voice", SpeechRate = 2, SpeechVolume = 61, SpeechRegion = 1,
-                TranscriptionLanguage = "MS-1033-80-DESK",
+                TranscriptionLanguage = "MS-1033-80-DESK", TranscriptionMicrophone = true,
                 BrowserTabs = ["https://chatgpt.com/", "https://example.com/"], BrowserSelectedTab = 1,
                 Playlist = [Path.Combine(folder, "not-connected-video.mp4")], PlaylistSelectedIndex = 0,
                 CaptureModes = new() { ["Missing test capture device"] = new(1920, 1080, 333333, "MJPG") }
@@ -44,7 +44,7 @@ internal static class PreferencesTests
             await store.SaveAsync(settings);
             var restored = (await store.LoadAsync()).Preferences;
             if (restored.VideoDevice != settings.VideoDevice || restored.CaptureModes[settings.VideoDevice] != settings.CaptureModes[settings.VideoDevice] || restored.Volume != 42 ||
-                restored.MenuOpacity != 0.62 || restored.Playlist.Count != 1 || restored.SpeechVoice != settings.SpeechVoice || restored.SpeechRate != 2 || restored.SpeechVolume != 61 || restored.SpeechRegion != 1 || restored.TranscriptionLanguage != settings.TranscriptionLanguage || !restored.BrowserTabs.SequenceEqual(settings.BrowserTabs) || restored.BrowserSelectedTab != 1)
+                restored.MenuOpacity != 0.62 || restored.Playlist.Count != 1 || restored.SpeechVoice != settings.SpeechVoice || restored.SpeechRate != 2 || restored.SpeechVolume != 61 || restored.SpeechRegion != 1 || restored.TranscriptionLanguage != settings.TranscriptionLanguage || !restored.TranscriptionMicrophone || !restored.BrowserTabs.SequenceEqual(settings.BrowserTabs) || restored.BrowserSelectedTab != 1)
                 throw new Exception("Settings file round trip failed.");
             await Task.WhenAll(Enumerable.Range(0, 8).Select(index => store.SaveAsync(settings with { Volume = index })));
             if ((await store.LoadAsync()).Warning is not null || Directory.GetFiles(folder, "*.tmp").Length != 0)

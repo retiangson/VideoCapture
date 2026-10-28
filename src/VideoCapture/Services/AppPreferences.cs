@@ -21,6 +21,7 @@ internal sealed record AppPreferences
     public int SpeechVolume { get; init; } = 85;
     public int SpeechRegion { get; init; }
     public bool ShowFullscreenProgress { get; init; } = true;
+    public bool TranscriptionMicrophone { get; init; }
     public string? TranscriptionLanguage { get; init; }
     public List<string> BrowserTabs { get; init; } = [];
     public int BrowserSelectedTab { get; init; }
