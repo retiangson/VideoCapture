@@ -10,14 +10,14 @@ The player uses a shared dark theme, icon buttons with tooltips/accessibility na
 
 Use the up/down buttons to reorder, the trash button or Delete to remove a selected row, and **Clear** to empty the queue. Removing the currently playing item or clearing an active local playlist stops that local playback. These actions never delete video files. Duplicate paths are ignored, and the queue supports up to 200 entries. The ordered playlist and selection are saved with preferences; reopening restores the queue without automatically playing a movie. Saved live capture still resumes as configured.
 
-Volume and opacity sliders jump directly to the clicked point and support dragging from that point. **Menu opacity** in Capture settings or the fullscreen menu controls the opacity of the entire floating menu, including its text, icons, and sliders (35–100%); the value is remembered. **Browser opacity** remains independent. The fullscreen menu starts hidden, toggles with right-click, and opens near the bottom center; drag its grip to reposition it. Its Playlist button returns to the windowed playlist manager.
+Volume and opacity sliders jump directly to the clicked point and support dragging from that point. **Menu opacity** in Capture settings or the fullscreen menu controls the opacity of the entire floating menu, including its text, icons, and sliders (35–100%); the value is remembered. **Browser opacity** remains independent. The fullscreen menu starts hidden, toggles with left-click, and opens near the bottom center; drag its grip to reposition it. Its Playlist button returns to the windowed playlist manager.
 
 Player interaction checks: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-player artifacts/sample.mp4 artifacts/player-smoke`. This verifies queue ordering/deduplication, retained playlists, previous/next, automatic advance past a missing entry, click-position slider values, and full-menu opacity synchronization.
 
 The fullscreen menu includes a click/drag seek bar with elapsed and total time.
 **Timeline** hides/shows that bar and remembers the choice. Seeking is available
 for seekable local videos; HDMI capture shows **LIVE**. The menu still starts
-hidden and opens with right-click.
+hidden and opens with left-click.
 
 **Video** and **Reading** volume sliders are always visible in the windowed
 player and in the floating fullscreen menu. Each volume is saved independently.
@@ -90,13 +90,46 @@ Fullscreen covers the complete physical bounds of the monitor containing the app
 
 UVC live capture uses square pixels and the selected capture raster's proportions. The tested USB3 Video driver advertised a 1920×1080 stream with incorrect 4:3 display-aspect metadata, causing pillarboxing and vertical stretching. Live capture corrects that declaration to 16:9 for 1920×1080. Local movie files retain their own pixel-aspect metadata. Legacy anamorphic analog capture may require a different pixel-aspect policy.
 
-The fullscreen floating toolbar starts hidden. **Right-click the video** to show or hide it, or choose **Hide controls** on the toolbar. It is draggable and provides recording, snapshots, text recognition, CEC, browser, picture-fit, and exit controls. It hides when leaving fullscreen and closes with the app. Record controls operate on a selected capture device, and are disabled during local movie playback. **Copy frame** (also available outside fullscreen) places the current video picture on the Windows clipboard as an image and PNG; paste with `Ctrl+V`. It captures the video, excluding app controls. **Save frame** writes a PNG to a chosen location. **Copy recording** places the last completed recording on the clipboard as a file, for pasting into Explorer or apps accepting video files. Recordings are not automatically placed on the clipboard.
+The fullscreen floating toolbar starts hidden. **Left-click the video** to show or hide it, or choose **Hide controls** on the toolbar. It is draggable and provides recording, snapshots, text recognition, CEC, browser, picture-fit, and exit controls. It hides when leaving fullscreen and closes with the app. The main Record live button starts capture-device recording; it can also stop an active local clip started from the browser panel. **Copy frame** (also available outside fullscreen) places the current video picture on the Windows clipboard as an image and PNG; paste with `Ctrl+V`. It captures the video, excluding app controls. **Save frame** writes a PNG to a chosen location. **Copy recording** places the last completed recording on the clipboard as a file, for pasting into Explorer or apps accepting video files. Recordings are not automatically placed on the clipboard.
 
 Shortcuts: `Ctrl+Shift+C` copies the video frame, `Ctrl+Shift+T` copies video text, `Ctrl+Shift+X` selects screen text, `Ctrl+Shift+B` hides/shows the browser, `Ctrl+Shift+R` starts/stops capture recording, and `Esc` exits fullscreen from the video or toolbar. Shortcuts work while the corresponding VideoCapture window has focus. Copying images or text does not stop an active recording.
 
 **Copy video text (OCR)** recognizes English text from a native video snapshot and copies plain Unicode text for pasting. **Copy screen text…** takes a temporary desktop bitmap, lets you drag a rectangle over visible text, and copies recognized text from that rectangle. `Esc` cancels selection. The toolbar hides during screen selection and then restores its previous visibility; visible browser content remains available for selection. Images are processed locally in memory; video snapshots use a temporary PNG that is deleted afterward. No OCR service or account is used. Empty recognition or cancellation preserves the clipboard. The bundled Tesseract English model is in `tessdata`; OCR may misread small/blurred text and currently does not offer other languages.
 
 **Browser** opens a draggable, resizable Chromium/WebView2 window at **https://chatgpt.com/**. Use **+** or `Ctrl+T` for a new ChatGPT tab, click a tab to switch, and use **×** or `Ctrl+W` to close it. `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs; `Ctrl+L` focuses the address bar. Closing the last tab opens a fresh ChatGPT tab. Each tab has its own page and navigation history; back/forward/reload and the address bar apply to the selected tab. Sign-in popups and links requesting a new window open as tabs and preserve their opener relationship.
+
+In fullscreen, **right-click the video** to show/hide the browser independently
+of the player menu. Clicks inside a browser page keep their normal browser
+behavior. Double-clicking the video still enters/exits fullscreen.
+
+The browser window includes **Copy frame**, **Record video**, **Copy video text**,
+and **Panel opacity** together. Frame capture and OCR operate on the video
+source and copy to the clipboard. They exclude the browser, player controls,
+and other desktop windows. Panel opacity applies to the complete browser window,
+including its action bar and page, and retains the existing saved opacity.
+Hiding the browser preserves tabs and does not stop playback or recording.
+
+**Record video** records HDMI capture using the existing video/audio pipeline.
+For a local file, it marks the current playback position and saves the played
+segment when recording stops, without restarting playback. Pauses add no frozen
+frames to a local clip. Seeking, opening another source, and playlist changes
+are disabled while marking a clip; pausing, copying frames/text, and hiding the
+panel remain available. Stop, end-of-file, and normal app close finalize a pending
+clip. A crash before finalization cannot save an unfinished local clip.
+
+Local clips are exported to the Videos/VideoCapture folder as H.264/AAC MKV
+files, with source audio when available. They exclude browser content, desktop
+audio, and synthesized subtitle speech. Export is local and runs in a hidden
+FFmpeg process; long/high-resolution clips can take time to save. Playback,
+seeking, browser interaction and the other controls remain available while a
+clip saves; another local recording waits for that export to finish. Pending output
+uses a temporary filename and becomes the final clip only on success. Clips
+require the original source file to remain available and unchanged. Local-file
+subtitles are not burned into the exported clip; HDMI captions already present
+in the captured image remain part of that source.
+
+Browser action/click checks (isolated browser profile and generated media):
+`dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-panel artifacts/sample.mp4 artifacts/browser-panel-smoke`.
 
 Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Closing the application closes the tabs; the next browser window starts at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Downloads and website permission requests remain disabled. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
 

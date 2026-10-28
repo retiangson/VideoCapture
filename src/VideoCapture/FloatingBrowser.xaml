@@ -6,26 +6,35 @@
  WindowStartupLocation="CenterOwner" PreviewKeyDown="Browser_KeyDown">
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Border Background="#18212C" BorderBrush="#65768B" BorderThickness="1" CornerRadius="7" Padding="7">
-  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <DockPanel Margin="0,0,0,7" MouseLeftButtonDown="Drag_MouseDown">
     <Button Content="Hide (Ctrl+Shift+B)" DockPanel.Dock="Right" Click="Hide_Click" Padding="8,4"/>
     <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="12,0">
-     <TextBlock Text="Browser opacity" Foreground="White" VerticalAlignment="Center" Margin="0,0,7,0"/>
-     <Slider x:Name="Transparency" Width="110" Minimum="0.3" Maximum="1" Value="1" SmallChange="0.01" LargeChange="0.1" ValueChanged="Opacity_Changed" VerticalAlignment="Center" ToolTip="Browser remains clickable at every opacity"/>
+     <TextBlock Text="Panel opacity" Foreground="White" VerticalAlignment="Center" Margin="0,0,7,0"/>
+     <Slider x:Name="Transparency" Width="110" Minimum="0.3" Maximum="1" Value="1" SmallChange="0.01" LargeChange="0.1" ValueChanged="Opacity_Changed" VerticalAlignment="Center" ToolTip="Transparency applies to the browser and all controls; everything remains clickable"/>
     </StackPanel>
-    <TextBlock Text="⋮⋮  Floating browser" Foreground="White" FontWeight="SemiBold" Padding="6" Cursor="SizeAll"/>
+    <TextBlock Text="⋮⋮  Floating browser" Foreground="White" FontWeight="SemiBold" Padding="6" Cursor="SizeAll" TextTrimming="CharacterEllipsis"/>
    </DockPanel>
-   <DockPanel Grid.Row="1" Margin="0,0,0,7">
+   <Border Grid.Row="1" Background="#101923" CornerRadius="7" Padding="8" Margin="0,0,0,7"><StackPanel>
+    <WrapPanel>
+     <Button x:Name="CopyVideoFrameButton" IsEnabled="False" Click="CopyVideoFrame_Click" ToolTip="Copy the video picture to the clipboard"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock Text="Copy frame"/></StackPanel></Button>
+     <Button x:Name="RecordVideoButton" IsEnabled="False" Click="RecordVideo_Click" Background="#9B344E" BorderBrush="#B64662"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordVideoLabel" Text="Record video"/></StackPanel></Button>
+     <Button x:Name="CopyVideoTextButton" IsEnabled="False" Click="CopyVideoText_Click" ToolTip="Recognize text from the video and copy it"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock Text="Copy video text"/></StackPanel></Button>
+     <TextBlock x:Name="VideoRecordingTime" Foreground="#FF91AC" VerticalAlignment="Center" Margin="5,0,0,0"/>
+    </WrapPanel>
+    <TextBlock x:Name="VideoFeedback" Text="Video only · browser and other windows are excluded" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="2,6,2,0"/>
+   </StackPanel></Border>
+   <DockPanel Grid.Row="2" Margin="0,0,0,7">
     <StackPanel Orientation="Horizontal" DockPanel.Dock="Left"><Button x:Name="BackButton" Content="←" Click="Back_Click" Padding="10,5" IsEnabled="False"/><Button x:Name="ForwardButton" Content="→" Click="Forward_Click" Padding="10,5" IsEnabled="False"/><Button Content="↻" Click="Reload_Click" Padding="10,5"/></StackPanel>
     <Button Content="Go" DockPanel.Dock="Right" Click="Go_Click" Padding="12,5"/>
     <TextBox x:Name="Address" Padding="8,5" KeyDown="Address_KeyDown" ToolTip="Enter an https:// or http:// address"/>
    </DockPanel>
-   <DockPanel Grid.Row="2" Margin="0,0,0,6">
+   <DockPanel Grid.Row="3" Margin="0,0,0,6">
     <Button x:Name="NewTabButton" Content="+" DockPanel.Dock="Right" Click="NewTab_Click" Padding="12,5" ToolTip="New tab (Ctrl+T)" IsEnabled="False"/>
     <TabControl x:Name="Tabs" SelectionChanged="Tab_Changed" Background="#283342" BorderThickness="0" MinHeight="32"/>
    </DockPanel>
-   <Grid x:Name="BrowserHost" Grid.Row="3"/>
-   <TextBlock x:Name="Feedback" Grid.Row="4" Text="Starting browser…" Foreground="#C1CEDD" TextWrapping="Wrap" Margin="4,6"/>
+   <Grid x:Name="BrowserHost" Grid.Row="4"/>
+   <TextBlock x:Name="Feedback" Grid.Row="5" Text="Starting browser…" Foreground="#C1CEDD" TextWrapping="Wrap" Margin="4,6"/>
   </Grid>
  </Border>
 </Window>

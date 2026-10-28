@@ -24,6 +24,13 @@ internal static class Program
                 return 0;
             }
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            if (args is ["--test-browser-panel", var panelInput, var panelOutput])
+            {
+                var checks = BrowserPanelTests.RunAsync(Path.GetFullPath(panelInput), Path.GetFullPath(panelOutput));
+                PumpUntil(() => checks.IsCompleted, "browser capture panel checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
             if (args is ["--test-resume", var resumeInput, var resumeOutput])
             {
                 var checks = PlaybackResumeTests.RunAsync(Path.GetFullPath(resumeInput), Path.GetFullPath(resumeOutput));
@@ -385,7 +392,7 @@ internal static class Program
                 if (((UIElement)window.FindName(name)).Visibility != Visibility.Collapsed)
                     throw new Exception("Fullscreen did not hide " + name);
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Fullscreen toolbar must start hidden.");
-            ((UIElement)window.FindName("VideoBorder")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
+            ((UIElement)window.FindName("VideoBorder")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
             PumpUntil(() => window.FloatingToolbar?.IsVisible == true, "floating fullscreen toolbar");
             if (((Button)window.FloatingToolbar!.FindName("CopyFrameButton")).IsEnabled != true)
                 throw new Exception("Floating toolbar must permit frame capture while video is playing.");
@@ -474,10 +481,10 @@ internal static class Program
             if (((FrameworkElement)window.FindName("DevicePanel")).Visibility != Visibility.Collapsed)
                 throw new Exception("GPU fullscreen must hide the device panel.");
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("GPU fullscreen controls must start hidden.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Right-clicking the GPU overlay must show controls.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Right-clicking GPU video again must hide controls.");
+            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Left-clicking the GPU overlay must show controls.");
+            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Left-clicking GPU video again must hide controls.");
             SendKey(window, Key.Escape);
             CloseWindow(window);
             Console.WriteLine("WPF layout rendered. All smoke checks passed.");

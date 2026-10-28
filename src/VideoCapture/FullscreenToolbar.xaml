@@ -5,7 +5,7 @@
   <StackPanel MaxWidth="920">
    <DockPanel Margin="0,0,0,10">
     <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" Foreground="#91A0B7" FontSize="15" Padding="0,4,12,4" Cursor="SizeAll" MouseLeftButtonDown="Grip_MouseDown" ToolTip="Drag menu"/>
-    <Button Content="&#xE70E;" Style="{StaticResource IconButton}" Click="Hide_Click" DockPanel.Dock="Right" ToolTip="Hide controls · right-click video to show" AutomationProperties.Name="Hide menu" Margin="0" Width="28" Height="28" MinHeight="28" Padding="4"/>
+    <Button Content="&#xE70E;" Style="{StaticResource IconButton}" Click="Hide_Click" DockPanel.Dock="Right" ToolTip="Hide controls · left-click video to show" AutomationProperties.Name="Hide menu" Margin="0" Width="28" Height="28" MinHeight="28" Padding="4"/>
     <TextBlock x:Name="Elapsed" Text="00:00:00" Foreground="#FF91AC" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0"/>
     <TextBlock Text="VideoCapture" Foreground="#E8EEF7" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
    </DockPanel>
@@ -44,7 +44,7 @@
      <Slider x:Name="OpacitySlider" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" ToolTip="Transparency applies to this entire menu"/>
     </StackPanel>
    </Grid>
-   <TextBlock x:Name="Feedback" Text="Right-click video to toggle this menu · Esc exits fullscreen" Foreground="#7F90AA" FontSize="10" Margin="0,7,0,0" TextWrapping="Wrap" MaxWidth="880"/>
+   <TextBlock x:Name="Feedback" Text="Left-click video for controls · Right-click for browser · Esc exits fullscreen" Foreground="#7F90AA" FontSize="10" Margin="0,7,0,0" TextWrapping="Wrap" MaxWidth="880"/>
   </StackPanel>
  </Border>
 </Window>

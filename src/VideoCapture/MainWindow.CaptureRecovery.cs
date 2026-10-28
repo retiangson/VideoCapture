@@ -48,7 +48,7 @@ public partial class MainWindow
         _selectedAudioName = (AudioDevices.SelectedItem as CaptureDevice)?.Name;
         if (!ReferenceEquals(sender, AudioDevices)) RememberCapturePreference();
         QueuePreferencesSave();
-        if (_selectedVideoName is null || _session?.IsRecording == true) return;
+        if (_selectedVideoName is null || IsVideoRecording) return;
         // An explicit mode/audio change also resumes a manually stopped preview.
         _wantLivePreview = true;
         _retryNotBefore = 0;
@@ -71,7 +71,7 @@ public partial class MainWindow
     {
         if (_busy || _closing || Environment.TickCount64 < _retryNotBefore) return;
         _previewDebounce.Stop();
-        if (!_wantLivePreview || !_devicePresent || _session?.IsRecording == true) return;
+        if (!_wantLivePreview || !_devicePresent || IsVideoRecording) return;
         await RunAsync(async () =>
         {
             _retryNotBefore = Environment.TickCount64 + 3_000;
@@ -185,7 +185,7 @@ public partial class MainWindow
             }
             else if (_wantLivePreview && present && (!wasPresent || _session is not { IsLive: true }))
                 QueueAutomaticPreview();
-            else if (_wantLivePreview && present && audioWasPresent != _audioDevicePresent && _session?.IsRecording != true)
+            else if (_wantLivePreview && present && audioWasPresent != _audioDevicePresent && !IsVideoRecording)
                 QueueAutomaticPreview();
             if (recover && _wantLivePreview && !_devicePresent && _session is { IsLive: true })
                 await RecoverCaptureAsync("Capture device disconnected. Waiting for " + _selectedVideoName + "…");

@@ -4,13 +4,16 @@ namespace VideoCapture.Services;
 
 public sealed class RecordingStore
 {
-    public string DirectoryPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoCapture");
+    public string DirectoryPath { get; }
+    public RecordingStore(string? directoryPath = null) => DirectoryPath = Path.GetFullPath(directoryPath ?? Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoCapture"));
 
-    public string CreatePath()
+    public string CreatePath() => CreatePath("Roku");
+    public string CreateVideoPath() => CreatePath("Clip");
+    private string CreatePath(string prefix)
     {
         Directory.CreateDirectory(DirectoryPath);
-        return Path.Combine(DirectoryPath, $"Roku-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.mkv");
+        return Path.Combine(DirectoryPath, $"{prefix}-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.mkv");
     }
 
     public static bool HasOutput(string path)

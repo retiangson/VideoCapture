@@ -9,6 +9,7 @@ namespace VideoCapture;
 public partial class MainWindow
 {
     private FloatingBrowser? _browser;
+    internal Func<double, FloatingBrowser> BrowserFactory { get; set; } = opacity => new FloatingBrowser(opacity);
     internal FloatingBrowser? BrowserWindow => _browser;
     internal Task CopyVideoTextAsync() => RunAsync(async () =>
     {
@@ -53,10 +54,15 @@ public partial class MainWindow
         if (_closing || !_preferencesLoaded) return;
         if (_browser is null)
         {
-            _browser = new FloatingBrowser(_preferences.BrowserOpacity) { Owner = this };
+            _browser = BrowserFactory(_preferences.BrowserOpacity);
+            _browser.Owner = this;
             _browser.ScreenTextRequested += async (_, _) => await CopyScreenTextAsync();
+            _browser.CopyVideoFrameRequested += async (_, _) => await CopyFrameAsync();
+            _browser.CopyVideoTextRequested += async (_, _) => await CopyVideoTextAsync();
+            _browser.RecordVideoRequested += async (_, _) => await RunAsync(ToggleVideoRecordingCoreAsync);
             _browser.OpacityPreferenceChanged += (_, _) => QueuePreferencesSave();
         }
+        UpdateFullscreenToolbar();
         if (_browser.IsVisible) _browser.Hide();
         else { _browser.Topmost = _fullscreen; _browser.Show(); _browser.Activate(); }
     }
@@ -69,6 +75,12 @@ public partial class MainWindow
     private void Video_RightClick(object sender, MouseButtonEventArgs e)
     {
         if (!_fullscreen) return;
+        ToggleBrowser();
+        e.Handled = true;
+    }
+    private void Video_LeftClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!_fullscreen || e.ClickCount != 1) return;
         ToggleFullscreenToolbar();
         e.Handled = true;
     }

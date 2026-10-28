@@ -16,7 +16,7 @@ namespace VideoCapture;
 
 public partial class MainWindow : Window
 {
-    private readonly RecordingStore _recordings = new();
+    private readonly RecordingStore _recordings;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private readonly Stopwatch _recordingClock = new();
     private readonly Stopwatch _sourceClock = new();
@@ -42,10 +42,11 @@ public partial class MainWindow : Window
 
     public MainWindow() : this(new PreferencesStore(), new PlaybackHistoryStore()) { }
 
-    internal MainWindow(IPreferencesStore preferencesStore, IPlaybackHistoryStore playbackHistoryStore)
+    internal MainWindow(IPreferencesStore preferencesStore, IPlaybackHistoryStore playbackHistoryStore, RecordingStore? recordings = null)
     {
         _preferencesStore = preferencesStore;
         _playbackHistoryStore = playbackHistoryStore;
+        _recordings = recordings ?? new RecordingStore();
         InitializeComponent();
         SourceInitialized += (_, _) => WindowAppearance.ApplyDarkCaption(this);
         InitializeCaptureRecovery();
@@ -171,7 +172,7 @@ public partial class MainWindow : Window
         {
             if (!_closing)
             {
-                Status.Text = ex.Message;
+                ShowCaptureFeedback(ex.Message);
                 if (showError) MessageBox.Show(this, ex.Message, "VideoCapture", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -209,6 +210,7 @@ public partial class MainWindow : Window
 
     private async void Record_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
+        if (_localRecording is not null) { await ToggleLocalRecordingAsync(); return; }
         _wantLivePreview = true;
         if (_session?.IsRecording == true)
         {
@@ -229,7 +231,7 @@ public partial class MainWindow : Window
     internal Task OpenFileAsync(string path) => RunAsync(() => OpenFileCoreAsync(path));
     private async Task OpenFileCoreAsync(string path)
     {
-        if (_session?.IsRecording == true) throw new InvalidOperationException("Stop recording before opening a movie.");
+        if (IsVideoRecording) throw new InvalidOperationException("Stop recording before opening a movie.");
         var file = await Task.Run(() => PlaybackFile.Read(path));
         path = file.Path;
         var item = _playlist.Add(path) ?? throw new InvalidOperationException("The playlist is full. Remove a video before adding more.");
@@ -266,6 +268,7 @@ public partial class MainWindow : Window
     }
     private async Task StopAsync()
     {
+        await FinishLocalRecordingAsync();
         await SaveAndClearPlaybackHistoryAsync();
         await PrepareSubtitleSourceAsync(null, false);
         var session = _session;
@@ -301,7 +304,7 @@ public partial class MainWindow : Window
     private void UpdateControls()
     {
         bool ready = _preferencesLoaded && !_busy && !_closing;
-        bool recording = _session?.IsRecording == true;
+        bool recording = IsVideoRecording;
         OpenButton.IsEnabled = ready && !recording;
         VideoDevices.IsEnabled = AudioDevices.IsEnabled = RefreshButton.IsEnabled = ready && !recording;
         SetCaptureControlsEnabled(ready && !recording && !_loadingModes);
@@ -313,7 +316,7 @@ public partial class MainWindow : Window
         PauseButton.IsEnabled = ready && (_session is { IsLive: false, HasMedia: true } ||
             _session?.HasMedia != true && PlaylistList.SelectedItem is PlaylistEntry);
         StopButton.IsEnabled = !_busy && !_closing && (_session?.HasMedia == true || _wantLivePreview);
-        Seek.IsEnabled = ready && _session is { IsLive: false } && _session.Player.IsSeekable;
+        Seek.IsEnabled = ready && _localRecording is null && _session is { IsLive: false } && _session.Player.IsSeekable;
         CopyFrameButton.IsEnabled = ready && CanCaptureFrame;
         CopyTextButton.IsEnabled = ready && CanCaptureFrame;
         ScreenTextButton.IsEnabled = !_busy && !_closing;
@@ -418,7 +421,7 @@ public partial class MainWindow : Window
                 _previewClock.Restart();
             }
         }
-        RecordingTime.Text = _session.IsRecording ? "● " + FormatTime(_recordingClock.ElapsedMilliseconds) : "";
+        RecordingTime.Text = IsVideoRecording ? "● " + RecordingElapsed : "";
         UpdateFullscreenToolbar();
         if (!_session.IsLive)
         {
@@ -565,7 +568,7 @@ public partial class MainWindow : Window
 
     private async void Window_Drop(object sender, DragEventArgs e)
     {
-        if (!_preferencesLoaded || _session?.IsRecording == true || _busy) return;
+        if (!_preferencesLoaded || IsVideoRecording || _busy) return;
         if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
             await RunPlaylistActionAsync(() => AddPlaylistFilesAsync(files, true));
     }
@@ -587,6 +590,10 @@ public partial class MainWindow : Window
         GpuVideo.MediaPlayer = null;
         try
         {
+            if (_session is { HasMedia: true, IsLive: false } closingPlayback && closingPlayback.Player.IsPlaying) closingPlayback.Player.SetPause(true);
+            try { await FinishLocalRecordingAsync(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            { MessageBox.Show(this, "Could not save the video clip: " + ex.Message, "VideoCapture"); }
             RememberPlaybackPosition();
             await FlushPlaybackHistoryAsync();
             await FlushPreferencesAsync();
@@ -596,6 +603,6 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { MessageBox.Show(this, "Could not finalize the media session: " + ex.Message, "VideoCapture"); }
-        finally { _ = Dispatcher.BeginInvoke(new Action(Close)); }
+        finally { await _clipExport; _ = Dispatcher.BeginInvoke(new Action(Close)); }
     }
 }

@@ -12,6 +12,7 @@ public partial class FloatingBrowser : Window
 {
     internal const string HomeAddress = "https://chatgpt.com/";
     public event EventHandler? ScreenTextRequested;
+    public event EventHandler? CopyVideoFrameRequested, CopyVideoTextRequested, RecordVideoRequested;
     public event EventHandler? OpacityPreferenceChanged;
     private readonly List<BrowserTab> _tabs = [];
     private readonly string _initialAddress, _profileDirectory;
@@ -21,6 +22,18 @@ public partial class FloatingBrowser : Window
     private BrowserTab? ActiveTab => (Tabs.SelectedItem as TabItem)?.Tag as BrowserTab;
     internal WebView2CompositionControl? ActiveBrowser => ActiveTab?.View;
     internal int TabCount => _tabs.Count;
+    internal void SetVideoActions(bool canCapture, bool canRecord, bool recording, string elapsed, bool savingClip = false)
+    {
+        CopyVideoFrameButton.IsEnabled = CopyVideoTextButton.IsEnabled = canCapture;
+        RecordVideoButton.IsEnabled = canRecord;
+        RecordVideoLabel.Text = recording ? "Stop recording" : savingClip ? "Saving clip…" : "Record video";
+        RecordVideoButton.ToolTip = recording ? "Stop and save the video recording" : "Record the playing video and its source audio; browser is excluded";
+        VideoRecordingTime.Text = recording ? elapsed : "";
+    }
+    internal void SetVideoFeedback(string message) => VideoFeedback.Text = message;
+    private void CopyVideoFrame_Click(object sender, RoutedEventArgs e) => CopyVideoFrameRequested?.Invoke(this, EventArgs.Empty);
+    private void CopyVideoText_Click(object sender, RoutedEventArgs e) => CopyVideoTextRequested?.Invoke(this, EventArgs.Empty);
+    private void RecordVideo_Click(object sender, RoutedEventArgs e) => RecordVideoRequested?.Invoke(this, EventArgs.Empty);
 
     public FloatingBrowser(double opacity = 1) : this(opacity, HomeAddress, Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VideoCapture", "BrowserProfile")) { }
