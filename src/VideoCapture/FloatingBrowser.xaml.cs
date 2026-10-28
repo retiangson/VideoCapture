@@ -58,7 +58,7 @@ public partial class FloatingBrowser : Window
     internal void ResetMicrophoneFeedback()
     {
         MicrophoneLevel.Value = 0;
-        MicrophonePreview.Text = "Speak, then pause briefly to see recognized text here.";
+        MicrophonePreview.Text = "Speak, then choose Stop & transcribe for the final Whisper result.";
         MicrophoneFeedbackPanel.Visibility = MicrophoneSelected ? Visibility.Visible : Visibility.Collapsed;
     }
     internal void SetTranscript(string text) => TranscriptText.Text = text;
@@ -311,8 +311,9 @@ public partial class FloatingBrowser : Window
     private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
     internal void AdjustOpacity(int wheelDelta) => Transparency.Value = Math.Clamp(
         Transparency.Value + wheelDelta / 120d * .05, Transparency.Minimum, Transparency.Maximum);
-    private void TitleBar_MouseWheel(object sender, MouseWheelEventArgs e)
+    private void Browser_OpacityWheel(object sender, MouseWheelEventArgs e)
     {
+        if (e.OriginalSource is System.Windows.Media.Visual source && (source == BrowserHost || BrowserHost.IsAncestorOf(source))) return;
         AdjustOpacity(e.Delta);
         e.Handled = true;
     }

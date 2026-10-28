@@ -9,8 +9,6 @@ namespace VideoCapture.Services;
 internal sealed record TranscriptionLanguage(string Id, string Name)
 { public override string ToString() => Name; }
 
-internal sealed record MicrophoneFeedback(int Level, string Text, string Status);
-
 internal static class AudioTranscription
 {
     public const int MaximumSeconds = 120;
@@ -50,62 +48,29 @@ internal static class AudioTranscription
         if (await Task.Run(() => PlaybackFile.Read(source.Path), token) != source) throw new IOException("The video file changed during audio extraction.");
     }
 
-    public static Task<string> RecognizeAsync(string wave, string recognizerId, CancellationToken token) =>
-        RecognizeInputAsync(wave, recognizerId, CancellationToken.None, token);
-
-    public static Task<string> RecognizeMicrophoneAsync(string recognizerId, CancellationToken stop, CancellationToken token, IProgress<MicrophoneFeedback>? feedback = null) =>
-        RecognizeInputAsync(null, recognizerId, stop, token, feedback);
-
-    // A graceful stop keeps recognized speech; cancellation discards the in-flight result.
-    private static Task<string> RecognizeInputAsync(string? wave, string recognizerId, CancellationToken stop, CancellationToken token, IProgress<MicrophoneFeedback>? feedback = null) => Task.Run(async () =>
+    public static Task<string> RecognizeAsync(string wave, string recognizerId, CancellationToken token) => Task.Run(async () =>
     {
         token.ThrowIfCancellationRequested();
         using var recognizer = new SpeechRecognitionEngine(recognizerId);
         recognizer.LoadGrammar(new DictationGrammar());
-        if (wave is null) recognizer.SetInputToDefaultAudioDevice();
-        else recognizer.SetInputToWaveFile(wave);
+        recognizer.SetInputToWaveFile(wave);
         var text = new List<string>();
-        int level = 0;
-        string hypothesis = "", status = "Listening to the default Windows microphone…";
-        var feedbackClock = Stopwatch.StartNew();
-        void Report(bool force = false)
-        {
-            if (feedback is null) return;
-            lock (text)
-            {
-                if (!force && feedbackClock.ElapsedMilliseconds < 100) return;
-                feedbackClock.Restart();
-                string preview = string.Join(Environment.NewLine, text.Append(hypothesis).Where(t => !string.IsNullOrWhiteSpace(t)));
-                feedback.Report(new(level, preview, status));
-            }
-        }
-        recognizer.AudioLevelUpdated += (_, e) => { lock (text) level = e.AudioLevel; Report(); };
-        recognizer.SpeechHypothesized += (_, e) => { lock (text) { hypothesis = e.Result.Text; status = "Speech detected · recognizing…"; } Report(true); };
-        recognizer.SpeechRecognitionRejected += (_, _) => { lock (text) { status = "Speech was not understood. Check the selected language and microphone level."; hypothesis = ""; } Report(true); };
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         recognizer.SpeechRecognized += (_, e) =>
         {
-            if ((wave is null || e.Result.Confidence >= .35f) && !string.IsNullOrWhiteSpace(e.Result.Text))
-            {
-                lock (text) { text.Add(e.Result.Text.Trim()); hypothesis = ""; status = "Speech recognized · keep speaking, or choose Stop & transcribe."; }
-                Report(true);
-            }
+            if (e.Result.Confidence >= .35f && !string.IsNullOrWhiteSpace(e.Result.Text))
+                lock (text) text.Add(e.Result.Text.Trim());
         };
         recognizer.RecognizeCompleted += (_, e) =>
         {
             if (e.Error is { } error) completed.TrySetException(error);
-            else if (token.IsCancellationRequested || (e.Cancelled && !stop.IsCancellationRequested)) completed.TrySetCanceled();
+            else if (e.Cancelled || token.IsCancellationRequested) completed.TrySetCanceled();
             else completed.TrySetResult();
         };
         recognizer.RecognizeAsync(RecognizeMode.Multiple);
         using var registration = token.Register(() =>
         {
             try { recognizer.RecognizeAsyncCancel(); }
-            catch (InvalidOperationException) { }
-        });
-        using var stopRegistration = stop.Register(() =>
-        {
-            try { recognizer.RecognizeAsyncStop(); }
             catch (InvalidOperationException) { }
         });
         try { await completed.Task.WaitAsync(TimeSpan.FromMinutes(3)); }

@@ -3,7 +3,7 @@
  xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
  Title="VideoCapture" Icon="Assets/AppIcon.png" Width="1240" Height="800" MinWidth="940" MinHeight="660"
  Background="#0B1019" Foreground="#E8EEF7" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen"
- PreviewKeyDown="Window_KeyDown" AllowDrop="True" Drop="Window_Drop">
+ PreviewKeyDown="Window_KeyDown" PreviewMouseWheel="Video_OpacityWheel" AllowDrop="True" Drop="Window_Drop">
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Grid x:Name="RootLayout" Margin="24">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -22,9 +22,9 @@
   </Grid>
   <Grid x:Name="PlayerLayout" Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" MouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
+   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
     <Grid>
-     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" MouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
+     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
      <Viewbox x:Name="VideoScale" Stretch="Uniform"><Image x:Name="Video" Stretch="Fill" Width="16" Height="9" RenderOptions.BitmapScalingMode="LowQuality"/></Viewbox>
      <TextBlock x:Name="VideoPlaceholder" Text="Your screen, uninterrupted.&#10;&#10;Open videos or choose a capture device." Foreground="#8495AF" FontSize="16" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="32" MaxWidth="420"/>
     </Grid>
@@ -41,6 +41,7 @@
         <StackPanel Grid.Column="1"><TextBlock Text="Format" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="CaptureFormats" IsEnabled="False" SelectionChanged="CaptureSetting_Changed"/></StackPanel>
        </Grid>
        <TextBlock Text="Audio device" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="AudioDevices" DisplayMemberPath="Name" SelectionChanged="CaptureSetting_Changed"/>
+       <CheckBox x:Name="MonitorCaptureAudio" Content="Monitor capture audio" IsChecked="True" Checked="MonitorCaptureAudio_Changed" Unchecked="MonitorCaptureAudio_Changed" ToolTip="Play capture audio through speakers. Disable to prevent microphone echo; recording and transcription still capture source audio." Margin="0,6,0,8"/>
        <TextBlock x:Name="SourceDetails" Text="Choose a device. Preview starts automatically." Foreground="#91A0B7" FontSize="11" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,14"/>
        <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <Button x:Name="RecordButton" Click="Record_Click" Background="#9B344E" BorderBrush="#B64662"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordLabel" Text="Record live"/></StackPanel></Button>

@@ -16,12 +16,23 @@ public partial class MainWindow
         var loaded = await _preferencesStore.LoadAsync();
         if (_closing) return;
         _preferences = loaded.Preferences.Normalize();
+        if (_preferences.TranscriptionMicrophone && _preferences.MonitorCaptureAudio && _preferences.AudioDevice is { } savedAudio)
+        {
+            try
+            {
+                if (string.Equals(savedAudio, await MicrophoneRecording.DefaultDeviceNameAsync(), StringComparison.OrdinalIgnoreCase))
+                    _preferences = _preferences with { MonitorCaptureAudio = false };
+            }
+            catch (System.Runtime.InteropServices.COMException) { /* An absent default input must not prevent startup. */ }
+        }
+        if (_closing) return;
         _restoringPreferences = true;
         try
         {
             PreviewRenderer.SelectedIndex = _preferences.SoftwarePreview ? 1 : 0;
             PictureFit.SelectedIndex = _preferences.PictureFit;
             Volume.Value = _preferences.Volume;
+            MonitorCaptureAudio.IsChecked = _preferences.MonitorCaptureAudio;
             MenuOpacity.Value = _preferences.MenuOpacity;
             foreach (string path in _preferences.Playlist) _playlist.Add(path);
             PlaylistList.SelectedIndex = Math.Min(_preferences.PlaylistSelectedIndex, _playlist.Items.Count - 1);
@@ -69,6 +80,7 @@ public partial class MainWindow
             SoftwarePreview = PreviewRenderer.SelectedIndex == 1,
             PictureFit = _fullscreen ? _windowedPictureFit : PictureFit.SelectedIndex,
             Volume = Volume.Value,
+            MonitorCaptureAudio = MonitorCaptureAudio.IsChecked == true,
             BrowserTabs = _browser?.SessionReady == true ? _browser.SessionTabs : _preferences.BrowserTabs,
             BrowserSelectedTab = _browser?.SessionReady == true ? _browser.SelectedTabIndex : _preferences.BrowserSelectedTab,
             BrowserOpacity = _browser?.Opacity ?? _preferences.BrowserOpacity,

@@ -28,6 +28,10 @@ internal static class TranscriptionTests
         await ToolAsync("ffmpeg.exe", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=navy:s=640x360:r=15:d=30", "-stream_loop", "5", "-i", speech, "-t", "30", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", movie]);
         if (File.Exists(extracted)) File.Delete(extracted);
         await AudioTranscription.ExtractAsync(PlaybackFile.Read(movie), 0, 9000, extracted, default);
+        string whisper = await WhisperTranscription.RecognizeAsync(extracted, "whisper:en", default);
+        if (!whisper.Contains("quick brown fox", StringComparison.OrdinalIgnoreCase) || !whisper.Contains("copy this video transcript", StringComparison.OrdinalIgnoreCase))
+            throw new Exception("Offline Whisper fixture transcription failed: " + whisper);
+        Console.WriteLine("Whisper model checksum and real multilingual-model decoding passed.");
         string text = await AudioTranscription.RecognizeAsync(extracted, english.Id, default);
         if (!text.Contains("quick brown fox", StringComparison.OrdinalIgnoreCase) || !text.Contains("copy this video transcript", StringComparison.OrdinalIgnoreCase)) throw new Exception("Real offline source-audio recognition failed: " + text);
         string multiTrack = Path.Combine(output, "multiple audio tracks.mp4");
@@ -46,8 +50,14 @@ internal static class TranscriptionTests
             try { await AudioTranscription.RecognizeAsync(cancellable, english.Id, cancel.Token); throw new Exception("In-flight recognition ignored cancellation."); }
             catch (OperationCanceledException) { }
         }
+        using (var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200)))
+        {
+            try { await WhisperTranscription.RecognizeAsync(cancellable, "whisper:en", cancel.Token); throw new Exception("Whisper ignored in-flight cancellation."); }
+            catch (OperationCanceledException) { }
+        }
         using (File.Open(cancellable, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
         await ToolAsync("ffmpeg.exe", ["-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "2", "-c:a", "pcm_s16le", silence]);
+        if (!string.IsNullOrWhiteSpace(await WhisperTranscription.RecognizeAsync(silence, "whisper:en", default))) throw new Exception("Whisper silence gate produced a transcript.");
         if (!string.IsNullOrWhiteSpace(await AudioTranscription.RecognizeAsync(silence, english.Id, default))) throw new Exception("Silence produced a transcript.");
         Console.WriteLine("Source-audio extraction, real offline dictation, silence and cancellation checks passed: " + text.Replace(Environment.NewLine, " "));
 
@@ -135,16 +145,24 @@ internal static class TranscriptionTests
                 Press(browser, "CancelAudioButton");
                 await WaitAsync(() => ((ComboBox)browser.FindName("TranscriptSource")).IsEnabled, "microphone cancellation and release");
                 if (browser.Transcript != previousTranscript) throw new Exception("Microphone cancellation changed the previous transcript.");
-                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
                 int feedbackEvents = 0;
                 var microphoneFeedback = new Progress<MicrophoneFeedback>(update =>
                 {
                     if (update.Level is < 0 or > 100) throw new Exception("Microphone level is out of range.");
                     feedbackEvents++;
                 });
-                await AudioTranscription.RecognizeMicrophoneAsync(english.Id, stop.Token, CancellationToken.None, microphoneFeedback).WaitAsync(TimeSpan.FromSeconds(10));
-                await Task.Delay(100);
-                if (feedbackEvents == 0) throw new Exception("The microphone opened but Windows delivered no audio level or speech events.");
+                string recordedMicrophone = Path.Combine(output, "private microphone test.wav");
+                try
+                {
+                    using var captureStop = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
+                    await MicrophoneRecording.CaptureAsync(recordedMicrophone, captureStop.Token, default, microphoneFeedback);
+                    await Task.Delay(100);
+                    if (feedbackEvents == 0) throw new Exception("WASAPI capture delivered no audio-level events.");
+                    using var read = new NAudio.Wave.WaveFileReader(recordedMicrophone);
+                    if (read.Length < 1000 || read.WaveFormat.SampleRate != 16000 || read.WaveFormat.BitsPerSample != 16 || read.WaveFormat.Channels != 1)
+                        throw new Exception("The private WASAPI capture must produce nonempty 16 kHz mono PCM16 audio.");
+                }
+                finally { if (File.Exists(recordedMicrophone)) File.Delete(recordedMicrophone); }
                 Console.WriteLine("Default microphone checks passed: input opened, graceful stop, cancellation/release, no-video capture, hidden-panel capture, source lock and previous transcript preservation.");
             }
             browser.UpdateLayout();

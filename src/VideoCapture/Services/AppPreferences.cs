@@ -10,6 +10,7 @@ internal sealed record AppPreferences
     public Dictionary<string, CaptureMode> CaptureModes { get; init; } = new(StringComparer.Ordinal);
     public bool SoftwarePreview { get; init; }
     public int PictureFit { get; init; }
+    public bool MonitorCaptureAudio { get; init; } = true;
     public double Volume { get; init; } = 75;
     public double BrowserOpacity { get; init; } = 1;
     public double MenuOpacity { get; init; } = 0.96;

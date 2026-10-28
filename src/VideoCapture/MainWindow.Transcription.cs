@@ -15,6 +15,13 @@ public partial class MainWindow
     private Task _transcriptionTask = Task.CompletedTask, _transcriptionLanguages = Task.CompletedTask;
     private bool _transcribing, _transcriptionLanguagesReady;
     private CancellationTokenSource? _microphoneStop;
+    private bool _suppressLiveMonitoring;
+    private int EffectivePlaybackVolume => (_suppressLiveMonitoring || MonitorCaptureAudio.IsChecked != true) && _session?.IsLive == true ? 0 : (int)Volume.Value;
+    private void MonitorCaptureAudio_Changed(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (!_busy && _session?.IsLive == true) _session.Player.Volume = EffectivePlaybackVolume;
+        QueuePreferencesSave();
+    }
     private bool IsMicrophoneListening => _microphoneStop is { IsCancellationRequested: false };
     private bool IsAudioCapturing => _audioCapture is not null;
     private bool IsSourceLocked => IsVideoRecording || IsAudioCapturing;
@@ -23,15 +30,17 @@ public partial class MainWindow
     {
         try
         {
-            var languages = await AudioTranscription.LanguagesAsync();
+            IReadOnlyList<TranscriptionLanguage> installed = [];
+            try { installed = await AudioTranscription.LanguagesAsync(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { /* Whisper does not require an installed Windows recognizer. */ }
+            IReadOnlyList<TranscriptionLanguage> languages = [new("whisper:auto", "Auto detect · Whisper"), new("whisper:en", "English · Whisper"), .. installed];
             if (_closing || _browser is null) return;
             _browser.SetTranscriptLanguages(languages, _preferences.TranscriptionLanguage);
             _transcriptionLanguagesReady = languages.Count > 0;
-            if (languages.Count == 0) _browser.SetTranscriptStatus("Install a Windows desktop speech-recognition language to enable offline dictation.");
             UpdateFullscreenToolbar();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_closing) _browser?.SetTranscriptStatus("Windows speech recognition is unavailable: " + ex.Message); }
+        { if (!_closing) _browser?.SetTranscriptStatus("Transcription is unavailable: " + ex.Message); }
     }
     private bool CanStartSelectedAudio => _browser?.MicrophoneSelected == true
         ? !_closing && _transcriptionLanguagesReady && !_transcribing && !IsAudioCapturing
@@ -51,7 +60,10 @@ public partial class MainWindow
         if (_browser?.MicrophoneSelected == true)
         {
             if (!CanStartSelectedAudio || _browser.TranscriptLanguageId is not { } microphoneLanguage)
-                throw new InvalidOperationException("Choose an installed Windows speech language before starting the microphone.");
+                throw new InvalidOperationException("Choose a transcription language before starting the microphone.");
+            string microphoneName = await MicrophoneRecording.DefaultDeviceNameAsync();
+            if (_session?.IsLive == true && string.Equals(_selectedAudioName, microphoneName, StringComparison.OrdinalIgnoreCase))
+                MonitorCaptureAudio.IsChecked = false;
             _transcriptionCancellation?.Dispose();
             _transcriptionCancellation = new();
             _microphoneStop = new(TimeSpan.FromSeconds(AudioTranscription.MaximumSeconds));
@@ -87,7 +99,22 @@ public partial class MainWindow
                 heardSpeech |= !string.IsNullOrWhiteSpace(update.Text);
                 _browser?.SetMicrophoneFeedback(update);
             });
-            string text = await AudioTranscription.RecognizeMicrophoneAsync(language, stop, token, feedback);
+            string wave = NewAudioWave();
+            string text;
+            try
+            {
+                _suppressLiveMonitoring = true;
+                if (_session?.IsLive == true) _session.Player.Volume = EffectivePlaybackVolume;
+                try { await MicrophoneRecording.CaptureAsync(wave, stop, token, feedback); }
+                finally
+                {
+                    _suppressLiveMonitoring = false;
+                    if (!_closing && _session?.IsLive == true) _session.Player.Volume = EffectivePlaybackVolume;
+                }
+                if (!_closing) _browser?.SetTranscriptStatus("Transcribing locally with Whisper…");
+                text = await WhisperTranscription.RecognizeAsync(wave, language, token);
+            }
+            finally { DeleteAudioFile(wave); }
             if (_closing || token.IsCancellationRequested) return;
             if (string.IsNullOrWhiteSpace(text)) _browser?.SetTranscriptStatus(peak <= 1 && !heardSpeech
                 ? "No microphone input was detected. Check the default input device, mute switch, input volume, and Windows microphone permissions. Previous transcript was kept."
@@ -136,7 +163,9 @@ public partial class MainWindow
         {
             if (capture.File is { } file) await AudioTranscription.ExtractAsync(file, capture.StartMs, end, wave, token, capture.AudioOrdinal);
             token.ThrowIfCancellationRequested();
-            string text = await AudioTranscription.RecognizeAsync(wave, capture.Language, token);
+            string text = capture.Language.StartsWith("whisper:", StringComparison.Ordinal)
+                ? await WhisperTranscription.RecognizeAsync(wave, capture.Language, token)
+                : await AudioTranscription.RecognizeAsync(wave, capture.Language, token);
             if (_closing || token.IsCancellationRequested) return;
             if (string.IsNullOrWhiteSpace(text)) _browser?.SetTranscriptStatus("No clear speech was recognized. Previous transcript and clipboard were kept.");
             else

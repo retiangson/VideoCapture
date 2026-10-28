@@ -92,7 +92,7 @@ public partial class MainWindow : Window
             throw new OperationCanceledException("The app is closing.");
         }
         _session = created;
-        _session.Player.Volume = (int)Volume.Value;
+        _session.Player.Volume = EffectivePlaybackVolume;
         GpuVideo.MediaPlayer = software ? null : _session.Player;
         VideoScale.Visibility = software ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -195,6 +195,7 @@ public partial class MainWindow : Window
         await PrepareSubtitleSourceAsync(null, true);
         ResetPreview("Connecting to " + video.Name + "…");
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+        session.Player.Volume = _suppressLiveMonitoring || MonitorCaptureAudio.IsChecked != true ? 0 : (int)Volume.Value;
         await Task.Run(() => session.OpenCapture(video.Name, audio, path, mode, audioCapturePath));
         _sourceClock.Restart();
         _lastLiveFrames = 0;
@@ -334,7 +335,7 @@ public partial class MainWindow : Window
         if (_busy || _closing || _session is null) return;
         UpdatePlaybackResume();
         int actualVolume = _session.Player.Volume;
-        if (actualVolume >= 0 && actualVolume != (int)Volume.Value) _session.Player.Volume = (int)Volume.Value;
+        if (actualVolume >= 0 && actualVolume != EffectivePlaybackVolume) _session.Player.Volume = EffectivePlaybackVolume;
         if (_session.IsLive && _wantLivePreview)
         {
             long frames = _session.DisplayedFrames;
@@ -475,7 +476,7 @@ public partial class MainWindow : Window
     private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         QueuePreferencesSave();
-        if (!_busy && _session is not null) _session.Player.Volume = (int)e.NewValue;
+        if (!_busy && _session is not null) _session.Player.Volume = EffectivePlaybackVolume;
         if (SpeechVolume is not null) UpdateFullscreenToolbar();
     }
 

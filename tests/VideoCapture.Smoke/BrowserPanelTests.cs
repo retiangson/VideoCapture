@@ -49,9 +49,19 @@ internal static class BrowserPanelTests
                 throw new Exception("Video actions must be disabled without video.");
             await browser.Initialization.WaitAsync(TimeSpan.FromSeconds(25));
             if (browser.ActiveBrowser?.CoreWebView2 is null) throw new Exception("Browser initialization failed.");
-            var outsideWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.MouseWheelEvent };
+            var outsideWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent };
             overlay.RaiseEvent(outsideWheel);
             if (!outsideWheel.Handled || Math.Abs(browser.Opacity - .95) > .001) throw new Exception("Scrolling video outside the browser must adjust browser opacity.");
+            ((Slider)browser.FindName("Transparency")).Value = 1;
+            foreach (string name in new[] { "VideoTools", "Address" })
+            {
+                ((UIElement)browser.FindName(name)).RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+            }
+            if (Math.Abs(browser.Opacity - .9) > .001) throw new Exception("Capture actions and address bar must both adjust browser opacity.");
+            ((UIElement)browser.FindName("BrowserHost")).RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+            if (Math.Abs(browser.Opacity - .9) > .001) throw new Exception("Web-page wheel must not change opacity.");
+            ((UIElement)window.FindName("DevicePanel")).RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+            if (Math.Abs(browser.Opacity - .85) > .001) throw new Exception("Capture settings wheel must adjust the visible browser opacity.");
             ((Slider)browser.FindName("Transparency")).Value = 1;
             Console.WriteLine("Browser initialized; outside opacity routing passed.");
             var titleBar = (UIElement)browser.FindName("BrowserTitleBar");
@@ -68,6 +78,9 @@ internal static class BrowserPanelTests
             if (browser.WindowState != WindowState.Normal) throw new Exception("Browser restore failed.");
             Press(browser, "BrowserFullscreenButton");
             if (!browser.IsBrowserFullscreen || FullscreenDisplay.WindowBounds(browser) != FullscreenDisplay.MonitorBounds(browser)) throw new Exception("Browser fullscreen must cover its monitor.");
+            browser.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+            if (Math.Abs(browser.Opacity - .95) > .001) throw new Exception("Empty fullscreen browser chrome must adjust opacity.");
+            ((Slider)browser.FindName("Transparency")).Value = 1;
             SendKey(browser, Key.Escape);
             if (browser.IsBrowserFullscreen || Math.Abs(browser.Width - windowed.Width) > 2 || Math.Abs(browser.Height - windowed.Height) > 2) throw new Exception("Fullscreen exit must restore browser size.");
             Press(browser, "MinimizeButton");
