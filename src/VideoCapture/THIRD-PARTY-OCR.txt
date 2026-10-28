@@ -1,0 +1,17 @@
+Offline OCR components
+
+TesseractOCR .NET wrapper 5.5.2
+Copyright 2012-2019 Charles Weld
+Copyright 2021-2026 Kees van Spelde
+https://github.com/Sicos1977/TesseractOCR
+Licensed under the Apache License, Version 2.0.
+
+Tesseract OCR engine and English tessdata_fast model (4.1.0)
+https://github.com/tesseract-ocr/tesseract
+https://github.com/tesseract-ocr/tessdata_fast/tree/4.1.0
+Licensed under the Apache License, Version 2.0.
+The model is distributed unchanged. The Apache 2.0 license is in tessdata/LICENSE.
+
+The native OCR runtime also depends on Leptonica and other native libraries.
+Before redistributing the complete application, review the native package's
+dependency notices and the separate LibVLC and WebView2 licensing requirements.

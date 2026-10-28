@@ -1,0 +1,33 @@
+<Window x:Class="VideoCapture.CecRemoteWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="CEC remote" Icon="Assets/AppIcon.png" Width="430" Height="780" MinWidth="400" MinHeight="540"
+ Background="#101318" Foreground="#EDF2F7" WindowStartupLocation="CenterOwner">
+ <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20">
+  <TextBlock Text="USB-CEC remote" FontSize="23" FontWeight="SemiBold"/>
+  <TextBlock Text="Requires a separate compatible USB-CEC adapter and the libCEC Windows tools. Your capture card alone does not provide this connection." TextWrapping="Wrap" Foreground="#95A5B9" Margin="0,10,0,14"/>
+  <Button x:Name="LocateButton" Content="Locate cec-client.exe…" Click="Locate_Click"/>
+  <TextBlock x:Name="ClientPath" TextWrapping="Wrap" Foreground="#95A5B9" Margin="3,4,3,10"/>
+  <TextBlock x:Name="Feedback" Text="Disconnected." TextWrapping="Wrap" Foreground="#71D7C4" Margin="3,0,3,14"/>
+  <TextBlock Text="CEC adapter"/>
+  <ComboBox x:Name="Adapters" Margin="3,6" Padding="8"/>
+  <StackPanel Orientation="Horizontal">
+   <Button x:Name="DetectButton" Content="Detect adapters" Click="Detect_Click"/>
+   <Button x:Name="ConnectButton" Content="Connect" Click="Connect_Click" IsEnabled="False"/>
+  </StackPanel>
+  <TextBlock Text="Control device" Margin="0,12,0,0"/>
+  <ComboBox x:Name="Devices" Margin="3,6" Padding="8" SelectionChanged="Device_Changed"/>
+  <Button x:Name="ScanButton" Content="Scan HDMI devices" Click="Scan_Click" IsEnabled="False"/>
+  <StackPanel x:Name="RemoteButtons" IsEnabled="False">
+   <UniformGrid Columns="3" Margin="0,10,0,0">
+    <Button Content="Home" Tag="Home" Click="Key_Click"/><Button Content="↑" Tag="Up" Click="Key_Click"/><Button Content="Back" Tag="Back" Click="Key_Click"/>
+    <Button Content="←" Tag="Left" Click="Key_Click"/><Button Content="OK" Tag="Select" Click="Key_Click"/><Button Content="→" Tag="Right" Click="Key_Click"/>
+    <Button Content="Play" Tag="Play" Click="Key_Click"/><Button Content="↓" Tag="Down" Click="Key_Click"/><Button Content="Pause" Tag="Pause" Click="Key_Click"/>
+    <Button Content="Vol −" Tag="VolumeDown" Click="Key_Click"/><Button Content="Mute" Tag="Mute" Click="Key_Click"/><Button Content="Vol +" Tag="VolumeUp" Click="Key_Click"/>
+   </UniformGrid>
+   <UniformGrid Columns="2"><Button Content="Power on" Tag="on" Click="Power_Click"/><Button Content="Standby" Tag="off" Click="Power_Click"/></UniformGrid>
+  </StackPanel>
+  <TextBlock Text="Commands apply to the selected device. CEC support varies; Roku may ignore navigation commands. Volume usually targets a TV or audio system." TextWrapping="Wrap" Foreground="#95A5B9" Margin="3,12,3,0"/>
+ </StackPanel></ScrollViewer>
+</Window>

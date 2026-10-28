@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.vs/
+artifacts/
+*.user
+*.log
+.env
+.env.*
+!.env.example
+# Machine-specific launcher and separately restored third-party tools.
+/VideoCapture.lnk
+/src/VideoCapture/Tools/Media/*.exe

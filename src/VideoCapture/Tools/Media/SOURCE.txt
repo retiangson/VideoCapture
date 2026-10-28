@@ -1,0 +1,16 @@
+FFmpeg and ffprobe 8.1.1, full static Windows x64 build by Gyan Doshi.
+Unmodified binaries copied from the local Gyan.FFmpeg installation.
+
+Build provider and archive: https://www.gyan.dev/ffmpeg/builds/
+FFmpeg source for release 8.1.1: https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz
+Source repository: https://github.com/FFmpeg/FFmpeg/tree/n8.1.1
+FFmpeg documentation: https://ffmpeg.org/documentation.html
+Build configuration and version details: BUILD.txt
+License: GPL version 3 or later; see LICENSE.FFmpeg.txt.
+
+These are separate command-line executables invoked for local subtitle
+inspection/extraction. They are not loaded until subtitle reading is enabled.
+No network protocols are permitted for subtitle input.
+Keep the license and source notices with redistributed binaries. A public
+distribution must also satisfy the corresponding-source requirements of the
+included GPL software and its enabled dependencies.
