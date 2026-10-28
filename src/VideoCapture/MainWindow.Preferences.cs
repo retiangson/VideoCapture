@@ -78,6 +78,7 @@ public partial class MainWindow
             SpeechRate = (int)Math.Round(SpeechRate.Value),
             SpeechVolume = (int)SpeechVolume.Value,
             SpeechRegion = SpeechRegion.SelectedIndex,
+            ShowFullscreenProgress = _fullscreenToolbar?.ProgressVisible ?? _preferences.ShowFullscreenProgress,
             CaptureModes = new(_preferences.CaptureModes, StringComparer.Ordinal)
         };
         try { await _preferencesStore.SaveAsync(snapshot); }

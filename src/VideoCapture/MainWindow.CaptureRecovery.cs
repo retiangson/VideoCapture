@@ -96,6 +96,7 @@ public partial class MainWindow
     // its old graph is not opened concurrently; polling resumes after teardown.
     private async Task<bool> RecreateCaptureSessionAsync()
     {
+        await SaveAndClearPlaybackHistoryAsync();
         await PrepareSubtitleSourceAsync(null, false);
         if (_session is { } previous)
         {

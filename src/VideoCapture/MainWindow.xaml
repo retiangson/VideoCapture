@@ -87,7 +87,7 @@
        <TextBlock Text="Speech speed" Style="{StaticResource FieldLabel}"/>
        <DockPanel><TextBlock Text="{Binding Value, ElementName=SpeechRate, StringFormat={}{0:0}}" DockPanel.Dock="Right" Foreground="#91A0B7" Margin="8,0,0,0" VerticalAlignment="Center"/><Slider x:Name="SpeechRate" Minimum="-5" Maximum="5" SmallChange="1" Value="0" ValueChanged="SpeechSetting_Changed"/></DockPanel>
        <TextBlock Text="Speech volume" Style="{StaticResource FieldLabel}" Margin="0,10,0,0"/>
-       <Slider x:Name="SpeechVolume" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechSetting_Changed" Margin="0,0,0,12"/>
+       <Slider x:Name="SpeechSettingsVolume" Minimum="0" Maximum="100" Value="{Binding Value, ElementName=SpeechVolume, Mode=TwoWay}" Margin="0,0,0,12" ToolTip="Same reading volume as the player controls"/>
        <TextBlock Text="OCR subtitle region" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="SpeechRegion" SelectedIndex="0" SelectionChanged="SpeechVoice_Changed"><ComboBoxItem Content="Bottom 35%"/><ComboBoxItem Content="Bottom 50%"/><ComboBoxItem Content="Whole picture"/></ComboBox>
        <Border Background="#1B273A" CornerRadius="8" Padding="12" Margin="0,8,0,0"><StackPanel>
         <TextBlock x:Name="SpeechMode" Text="Subtitle reading is off." Foreground="#5CE0C1" TextWrapping="Wrap" FontSize="11"/>
@@ -110,7 +110,13 @@
       <Button x:Name="StopButton" Content="&#xE71A;" Style="{StaticResource IconButton}" Click="Stop_Click" ToolTip="Stop" AutomationProperties.Name="Stop" IsEnabled="False"/>
       <Button x:Name="NextButton" Content="&#xE893;" Style="{StaticResource IconButton}" Click="Next_Click" ToolTip="Next video" AutomationProperties.Name="Next video"/>
      </StackPanel>
-     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock Text="&#xE767;" FontFamily="Segoe MDL2 Assets" Foreground="#91A0B7" VerticalAlignment="Center" Margin="0,0,9,0"/><Slider x:Name="Volume" Width="110" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Volume"/><Button Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="14,0,0,0"/></StackPanel>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+      <StackPanel>
+       <DockPanel><TextBlock Text="Video" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=Volume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/></DockPanel>
+       <DockPanel><TextBlock Text="Reading" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=SpeechVolume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="SpeechVolume" Width="100" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/></DockPanel>
+      </StackPanel>
+      <Button Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="12,0,0,0"/>
+     </StackPanel>
     </Grid>
     <TextBlock x:Name="Status" Text="Ready — select a capture device or open a movie." Foreground="#7F90AA" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,9,0,0"/>
    </StackPanel>

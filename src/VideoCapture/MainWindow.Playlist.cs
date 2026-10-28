@@ -98,7 +98,7 @@ public partial class MainWindow
     }
     private void MenuOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_fullscreenToolbar is not null) _fullscreenToolbar.SetLevels(e.NewValue, Volume.Value);
+        if (_fullscreenToolbar is not null) _fullscreenToolbar.SetLevels(e.NewValue, Volume.Value, SpeechVolume.Value);
         QueuePreferencesSave();
     }
     private Task AdvancePlaylistAfterEndAsync() => RunAsync(async () =>

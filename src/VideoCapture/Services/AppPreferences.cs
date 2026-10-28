@@ -20,6 +20,7 @@ internal sealed record AppPreferences
     public int SpeechRate { get; init; }
     public int SpeechVolume { get; init; } = 85;
     public int SpeechRegion { get; init; }
+    public bool ShowFullscreenProgress { get; init; } = true;
 
     internal AppPreferences Normalize() => this with
     {

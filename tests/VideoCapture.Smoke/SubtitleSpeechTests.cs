@@ -65,7 +65,7 @@ internal static class SubtitleSpeechTests
         var fake = new FakeSpeaker();
         var store = new MemoryPreferencesStore();
         var voiceReady = new TaskCompletionSource<ISubtitleVoiceSpeaker>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var window = new MainWindow(store) { SubtitleSpeakerFactory = () => voiceReady.Task };
+        var window = new MainWindow(store, new MemoryPlaybackHistoryStore()) { SubtitleSpeakerFactory = () => voiceReady.Task };
         window.Show();
         try
         {
@@ -158,6 +158,7 @@ internal static class SubtitleSpeechTests
         public bool Paused { get; private set; }
         public bool Disposed { get; private set; }
         public void Configure(string? voice, int rate, int volume) { }
+        public void SetVolume(int volume) { }
         public void Replace(string text) => Lines.Add(text);
         public void Stop() => Paused = false;
         public void SetPaused(bool paused) => Paused = paused;

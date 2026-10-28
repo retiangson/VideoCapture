@@ -28,7 +28,7 @@ internal static class PlayerTests
         if (queue.Current is not null || queue.Items.Count != 0) throw new Exception("Clearing playlist must clear current video.");
         var settings = new MemoryPreferencesStore();
         await settings.SaveAsync(new AppPreferences { MenuOpacity = 0.58, Volume = 25, Playlist = [input, second], PlaylistSelectedIndex = 0 });
-        var window = new MainWindow(settings);
+        var window = new MainWindow(settings, new MemoryPlaybackHistoryStore());
         window.Show();
         try
         {
@@ -63,7 +63,7 @@ internal static class PlayerTests
             await CloseAsync(window);
             if (settings.Saved.Playlist.Count != 3 || Math.Abs(settings.Saved.MenuOpacity - opacity) > 0.001)
                 throw new Exception("Playlist order and whole-menu opacity must persist on close.");
-            var reopened = new MainWindow(settings);
+            var reopened = new MainWindow(settings, new MemoryPlaybackHistoryStore());
             reopened.Show();
             await WaitAsync(() => ((Button)reopened.FindName("OpenButton")).IsEnabled && reopened.Playlist.Items.Count == 3, "playlist reopen");
             if (reopened.Playlist.Current is not null || ((Button)reopened.FindName("StopButton")).IsEnabled)
@@ -74,7 +74,7 @@ internal static class PlayerTests
         }
         finally { if (window.IsVisible) await CloseAsync(window); }
     }
-    private static void CheckPointSelection(Slider slider, double fraction)
+    internal static void CheckPointSelection(Slider slider, double fraction)
     {
         slider.ApplyTemplate(); slider.UpdateLayout();
         var track = (Track)slider.Template.FindName("PART_Track", slider);

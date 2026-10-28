@@ -14,6 +14,40 @@ Volume and opacity sliders jump directly to the clicked point and support draggi
 
 Player interaction checks: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-player artifacts/sample.mp4 artifacts/player-smoke`. This verifies queue ordering/deduplication, retained playlists, previous/next, automatic advance past a missing entry, click-position slider values, and full-menu opacity synchronization.
 
+The fullscreen menu includes a click/drag seek bar with elapsed and total time.
+**Timeline** hides/shows that bar and remembers the choice. Seeking is available
+for seekable local videos; HDMI capture shows **LIVE**. The menu still starts
+hidden and opens with right-click.
+
+**Video** and **Reading** volume sliders are always visible in the windowed
+player and in the floating fullscreen menu. Each volume is saved independently.
+Reading volume adjusts the Windows voice without restarting its current line;
+the Speech tab offers the same synchronized reading-volume setting.
+
+## Resume local videos
+
+Opening a previously played file automatically resumes its saved position once
+the player is ready to seek. History loads without autoplaying a movie. Playback
+positions are checkpointed every five seconds and saved on pause, stop, file or
+capture-source switches, and normal app exit. An abrupt shutdown can lose the
+last few seconds since the latest completed checkpoint.
+
+History is a local, atomically replaced JSON file at
+`%LOCALAPPDATA%/VideoCapture/playback-history.json`; no database server or
+internet connection is used. It retains up to 1,000 recent file entries within
+a 4 MB storage limit, including files removed from the playlist. File paths
+match without regard to case; size and modification time must also match so
+modified/replaced files normally start fresh. Moving or renaming a file gives
+it a new history entry. Live capture is excluded. Finished videos, including
+the final 2% (at most ten seconds), restart at the beginning. Non-seekable files
+continue at their current position if resume is unavailable.
+
+To restart a video manually, seek to the beginning. To clear all resume history,
+close the app and delete `playback-history.json`. Corrupt or oversized history
+falls back to an empty history with a diagnostic and does not prevent playback.
+
+Resume/control checks: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-resume artifacts/sample.mp4 artifacts/resume-smoke`.
+
 ## Run
 
 Requires Windows 10 version 2004 or later / Windows 11 x64 and the .NET 10 Desktop Runtime (the SDK includes it). OCR requires the Visual C++ 2022 x64 runtime; the floating browser requires Microsoft Edge WebView2 Runtime. Capture/playback does not depend on the browser being initialized.

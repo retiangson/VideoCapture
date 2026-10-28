@@ -9,6 +9,10 @@
     <TextBlock x:Name="Elapsed" Text="00:00:00" Foreground="#FF91AC" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0"/>
     <TextBlock Text="VideoCapture" Foreground="#E8EEF7" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
    </DockPanel>
+   <DockPanel x:Name="ProgressPanel" Margin="0,0,0,9">
+    <TextBlock x:Name="MenuPositionText" Text="00:00:00 / 00:00:00" DockPanel.Dock="Right" Foreground="#91A0B7" FontSize="11" Margin="14,0,0,0" VerticalAlignment="Center"/>
+    <Slider x:Name="MenuSeek" Minimum="0" Maximum="1000" IsEnabled="False" ValueChanged="MenuSeek_Changed" ToolTip="Seek video" AutomationProperties.Name="Video progress"/>
+   </DockPanel>
    <WrapPanel Margin="0,0,0,8">
     <Button x:Name="PreviousButton" Content="&#xE892;" Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Previous video" AutomationProperties.Name="Previous video"/>
     <Button x:Name="PlayButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Play_Click" Background="#5CE0C1" Foreground="#09251F" BorderBrush="#5CE0C1" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause"/>
@@ -24,17 +28,21 @@
     <Button x:Name="CopyRecordingButton" Content="&#xE8C8;" Style="{StaticResource IconButton}" Click="CopyRecording_Click" ToolTip="Copy last recording file" AutomationProperties.Name="Copy recording"/>
     <Button x:Name="FitButton" Content="&#xE9A6;" Style="{StaticResource IconButton}" Click="Fit_Click" ToolTip="Show whole frame" AutomationProperties.Name="Picture fit"/>
     <Button x:Name="SpeechButton" Content="Read aloud" Click="Speech_Click" ToolTip="Toggle subtitle speech"/>
+    <Button x:Name="ProgressButton" Content="Timeline" Click="Progress_Click" ToolTip="Hide video progress"/>
     <Button Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser" AutomationProperties.Name="Browser"/>
     <Button Content="&#xE8AE;" Style="{StaticResource IconButton}" Click="Cec_Click" ToolTip="CEC remote" AutomationProperties.Name="CEC remote"/>
     <Button x:Name="ExitButton" Content="&#xE73F;" Style="{StaticResource IconButton}" Click="Exit_Click" ToolTip="Exit fullscreen (Esc)" AutomationProperties.Name="Exit fullscreen" Margin="0"/>
    </WrapPanel>
-   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="120"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="150"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <TextBlock Text="&#xE767;" FontFamily="Segoe MDL2 Assets" Foreground="#91A0B7" VerticalAlignment="Center" Margin="0,0,9,0"/>
-    <Slider x:Name="MenuVolume" Grid.Column="1" Minimum="0" Maximum="100" Value="75" ValueChanged="MenuVolume_Changed" ToolTip="Volume"/>
-    <TextBlock Grid.Column="2" Text="{Binding Value, ElementName=MenuVolume, StringFormat={}{0:0}%}" Foreground="#91A0B7" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="34"/>
-    <TextBlock Grid.Column="4" Text="Menu opacity" Foreground="#91A0B7" VerticalAlignment="Center" Margin="30,0,10,0" FontSize="11"/>
-    <Slider x:Name="OpacitySlider" Grid.Column="5" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" ToolTip="Transparency applies to this entire menu"/>
-    <TextBlock Grid.Column="6" Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Foreground="#91A0B7" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="34"/>
+   <Grid MinWidth="700"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <StackPanel Margin="0,0,20,0"><DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=MenuVolume, StringFormat={}{0:0}%}" Foreground="#91A0B7" FontSize="11"/><TextBlock Text="Video volume" Foreground="#91A0B7" FontSize="11"/></DockPanel>
+     <Slider x:Name="MenuVolume" Minimum="0" Maximum="100" Value="75" ValueChanged="MenuVolume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/>
+    </StackPanel>
+    <StackPanel Grid.Column="1" Margin="0,0,20,0"><DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=MenuSpeechVolume, StringFormat={}{0:0}%}" Foreground="#91A0B7" FontSize="11"/><TextBlock Text="Reading volume" Foreground="#91A0B7" FontSize="11"/></DockPanel>
+     <Slider x:Name="MenuSpeechVolume" Minimum="0" Maximum="100" Value="85" ValueChanged="MenuSpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/>
+    </StackPanel>
+    <StackPanel Grid.Column="2"><DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Foreground="#91A0B7" FontSize="11"/><TextBlock Text="Menu opacity" Foreground="#91A0B7" FontSize="11"/></DockPanel>
+     <Slider x:Name="OpacitySlider" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" ToolTip="Transparency applies to this entire menu"/>
+    </StackPanel>
    </Grid>
    <TextBlock x:Name="Feedback" Text="Right-click video to toggle this menu · Esc exits fullscreen" Foreground="#7F90AA" FontSize="10" Margin="0,7,0,0" TextWrapping="Wrap" MaxWidth="880"/>
   </StackPanel>

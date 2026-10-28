@@ -115,9 +115,18 @@ public partial class MainWindow
     { if (_preferencesLoaded && !_speechUiUpdating && !_closing && SpeechEnabled.IsChecked == true && _subtitleSpeaker is not null) BeginSubtitleLoad(); }
     private void SpeechVoice_Changed(object sender, SelectionChangedEventArgs e) => SpeechConfigurationChanged();
     private void SpeechSetting_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) => SpeechConfigurationChanged();
+    private void SpeechVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_preferencesLoaded || _speechUiUpdating || _closing) return;
+        try { _subtitleSpeaker?.SetVolume((int)e.NewValue); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { SpeechMode.Text = "Reading volume failed: " + ex.Message; }
+        UpdateFullscreenToolbar();
+        QueuePreferencesSave();
+    }
     private void SpeechConfigurationChanged()
     {
         if (!_preferencesLoaded || _speechUiUpdating || _closing) return;
+        UpdateFullscreenToolbar();
         InvalidateSubtitleSpeech();
         try { ConfigureSubtitleVoice(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SpeechMode.Text = "Voice setting failed: " + ex.Message; }

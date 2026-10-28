@@ -12,6 +12,13 @@ internal sealed class MemoryPreferencesStore : IPreferencesStore
     public Task SaveAsync(AppPreferences preferences) { Saved = preferences.Normalize(); return Task.CompletedTask; }
 }
 
+internal sealed class MemoryPlaybackHistoryStore : IPlaybackHistoryStore
+{
+    public IReadOnlyList<PlaybackBookmark> Saved { get; private set; } = [];
+    public Task<PlaybackHistoryLoadResult> LoadAsync() => Task.FromResult(new PlaybackHistoryLoadResult(Saved));
+    public Task SaveAsync(IReadOnlyList<PlaybackBookmark> entries) { Saved = entries.ToArray(); return Task.CompletedTask; }
+}
+
 internal static class PreferencesTests
 {
     internal static async Task RunAsync()
@@ -52,7 +59,7 @@ internal static class PreferencesTests
             if (normalized.Volume != 100 || normalized.PictureFit != 0 || normalized.BrowserOpacity != 0.3 || normalized.CaptureModes.Count != 0)
                 throw new Exception("Malformed preference values were not normalized.");
             await store.SaveAsync(settings);
-            var window = new MainWindow(store);
+            var window = new MainWindow(store, new MemoryPlaybackHistoryStore());
             var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.Loaded += (_, _) => loaded.TrySetResult();
             window.Show();

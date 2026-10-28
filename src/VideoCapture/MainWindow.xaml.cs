@@ -40,11 +40,12 @@ public partial class MainWindow : Window
     private ResizeMode _windowedResizeMode;
     private int _windowedPictureFit;
 
-    public MainWindow() : this(new PreferencesStore()) { }
+    public MainWindow() : this(new PreferencesStore(), new PlaybackHistoryStore()) { }
 
-    internal MainWindow(IPreferencesStore preferencesStore)
+    internal MainWindow(IPreferencesStore preferencesStore, IPlaybackHistoryStore playbackHistoryStore)
     {
         _preferencesStore = preferencesStore;
+        _playbackHistoryStore = playbackHistoryStore;
         InitializeComponent();
         SourceInitialized += (_, _) => WindowAppearance.ApplyDarkCaption(this);
         InitializeCaptureRecovery();
@@ -65,6 +66,7 @@ public partial class MainWindow : Window
         await Dispatcher.Yield(DispatcherPriority.ContextIdle);
         if (_closing) return;
         await RestorePreferencesAsync();
+        await RestorePlaybackHistoryAsync();
         if (_closing) return;
         UpdateControls();
         RestoreSubtitleSpeechPreferences();
@@ -188,6 +190,7 @@ public partial class MainWindow : Window
         string? path = record ? _recordings.CreatePath() : null;
         var session = _session;
         var mode = GetSelectedCaptureMode();
+        await SaveAndClearPlaybackHistoryAsync();
         await PrepareSubtitleSourceAsync(null, true);
         ResetPreview("Connecting to " + video.Name + "…");
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
@@ -227,7 +230,8 @@ public partial class MainWindow : Window
     private async Task OpenFileCoreAsync(string path)
     {
         if (_session?.IsRecording == true) throw new InvalidOperationException("Stop recording before opening a movie.");
-        if (!await Task.Run(() => File.Exists(path))) throw new FileNotFoundException("The movie file no longer exists.", path);
+        var file = await Task.Run(() => PlaybackFile.Read(path));
+        path = file.Path;
         var item = _playlist.Add(path) ?? throw new InvalidOperationException("The playlist is full. Remove a video before adding more.");
         CancelAutomaticPreview();
         if (_session is null)
@@ -237,10 +241,12 @@ public partial class MainWindow : Window
         }
         if (_session is null) throw new InvalidOperationException("The media engine is unavailable.");
         var session = _session;
+        await SaveAndClearPlaybackHistoryAsync();
         await PrepareSubtitleSourceAsync(path, false);
         ResetPreview("Opening movie…");
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
         await Task.Run(() => session.OpenFile(path));
+        BeginPlaybackHistory(file);
         _sourceClock.Restart();
         Status.Text = Path.GetFileName(path);
         _playlist.SetCurrent(item);
@@ -260,6 +266,7 @@ public partial class MainWindow : Window
     }
     private async Task StopAsync()
     {
+        await SaveAndClearPlaybackHistoryAsync();
         await PrepareSubtitleSourceAsync(null, false);
         var session = _session;
         string? path = session?.RecordingPath;
@@ -282,7 +289,12 @@ public partial class MainWindow : Window
     private async void Pause_Click(object sender, RoutedEventArgs e)
     {
         if (_busy || _closing) return;
-        if (_session is { IsLive: false, HasMedia: true } session) session.Player.Pause();
+        if (_session is { IsLive: false, HasMedia: true } session)
+        {
+            session.Player.Pause();
+            RememberPlaybackPosition();
+            _historyWrite = SavePlaybackHistoryAsync();
+        }
         else if (_session?.HasMedia != true && PlaylistList.SelectedItem is PlaylistEntry selected) await OpenFileAsync(selected.Path);
     }
 
@@ -314,6 +326,7 @@ public partial class MainWindow : Window
         if (_busy || _closing) return;
         UpdateFullscreenToolbar();
         if (_session is null) return;
+        UpdatePlaybackResume();
         int actualVolume = _session.Player.Volume;
         if (actualVolume >= 0 && actualVolume != (int)Volume.Value) _session.Player.Volume = (int)Volume.Value;
         if (_session.IsLive && _wantLivePreview)
@@ -413,14 +426,19 @@ public partial class MainWindow : Window
             if (!_draggingSeek)
             {
                 _updatingSeek = true;
-                Seek.Value = Math.Max(0, _session.Player.Position * 1000);
+                long displayPosition = _requestedPositionMs ?? _resumePositionMs ?? _session.Player.Time;
+                Seek.Value = _session.Player.Length > 0 ? Math.Clamp(1000d * displayPosition / _session.Player.Length, 0, 1000) : 0;
                 _updatingSeek = false;
             }
         }
         else PositionText.Text = "LIVE";
     }
 
-    private static string FormatTime(long milliseconds) => TimeSpan.FromMilliseconds(Math.Max(0, milliseconds)).ToString(@"hh\:mm\:ss");
+    private static string FormatTime(long milliseconds)
+    {
+        var time = TimeSpan.FromTicks(Math.Clamp(milliseconds, 0, TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerMillisecond) * TimeSpan.TicksPerMillisecond);
+        return $"{(long)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
+    }
     private void ResetPreview(string message)
     {
         Video.Source = null;
@@ -445,14 +463,14 @@ public partial class MainWindow : Window
     {
         if (!_busy && _session is { IsLive: false } session && session.Player.IsSeekable)
         {
-            InvalidateSubtitleSpeech();
-            session.Player.Position = (float)(Seek.Value / 1000);
+            SeekPlaybackTo((long)(session.Player.Length * Seek.Value / 1000));
         }
     }
     private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         QueuePreferencesSave();
         if (!_busy && _session is not null) _session.Player.Volume = (int)e.NewValue;
+        if (SpeechVolume is not null) UpdateFullscreenToolbar();
     }
 
     private void Folder_Click(object sender, RoutedEventArgs e)
@@ -569,6 +587,8 @@ public partial class MainWindow : Window
         GpuVideo.MediaPlayer = null;
         try
         {
+            RememberPlaybackPosition();
+            await FlushPlaybackHistoryAsync();
             await FlushPreferencesAsync();
             await ShutdownSubtitleSpeechAsync();
             if (_cecRemote is not null) await _cecRemote.ShutdownAsync();

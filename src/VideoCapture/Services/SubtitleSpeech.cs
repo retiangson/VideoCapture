@@ -13,6 +13,7 @@ internal interface ISubtitleVoiceSpeaker : ISubtitleSpeaker
     event Action<string>? Failed;
     IReadOnlyList<string> Voices { get; }
     void Configure(string? voice, int rate, int volume);
+    void SetVolume(int volume);
 }
 
 internal sealed class WindowsSubtitleSpeaker : ISubtitleVoiceSpeaker
@@ -41,6 +42,7 @@ internal sealed class WindowsSubtitleSpeaker : ISubtitleVoiceSpeaker
         _synthesizer.Volume = Math.Clamp(volume, 0, 100);
     }
     public void Replace(string text) { Stop(); _synthesizer.SpeakAsync(text.Length > 700 ? text[..700] : text); }
+    public void SetVolume(int volume) => _synthesizer.Volume = Math.Clamp(volume, 0, 100);
     public void Stop() { _synthesizer.SpeakAsyncCancelAll(); if (_synthesizer.State == SynthesizerState.Paused) _synthesizer.Resume(); }
     public void SetPaused(bool paused)
     {
