@@ -6,8 +6,8 @@ android {
         applicationId 'com.retiangson.videocapture'
         minSdk 29
         targetSdk 36
-        versionCode 3
-        versionName '0.2.1'
+        versionCode 4
+        versionName '0.2.2'
         resValue 'string','app_name','VideoCapture'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         externalNativeBuild { cmake { arguments '-DGGML_OPENMP=OFF', '-DGGML_NATIVE=OFF', '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_EXAMPLES=OFF', '-DWHISPER_BUILD_SERVER=OFF', '-DBUILD_SHARED_LIBS=OFF'; cppFlags '-std=c++17' } }

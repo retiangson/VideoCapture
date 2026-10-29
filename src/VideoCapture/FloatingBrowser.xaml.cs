@@ -33,6 +33,7 @@ public partial class FloatingBrowser : Window
     }
     internal void SetAudioState(bool canStart, bool capturing, bool processing, string elapsed)
     {
+        Controls.ButtonState.SetIsActive(StartAudioButton, capturing || processing);
         StartAudioButton.IsEnabled = canStart;
         StartAudioButton.Content = capturing ? "Stop & transcribe · " + elapsed : processing ? "Transcribing…" : "Start capture";
         AudioTextLabel.Text = capturing ? "Audio to text · capturing" : processing ? "Audio to text · processing" : "Audio to text";
@@ -68,6 +69,7 @@ public partial class FloatingBrowser : Window
         bool show = TranscriptPanel.Visibility != Visibility.Visible;
         TranscriptPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         TranscriptPanel.IsExpanded = show;
+        Controls.ButtonState.SetIsActive(AudioTextButton, show);
         if (!show && !IsBrowserFullscreen) MinHeight = 400;
     }
     private void AudioStart_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
@@ -107,6 +109,7 @@ public partial class FloatingBrowser : Window
     internal void SetVideoActions(bool canCapture, bool canRecord, bool recording, string elapsed, bool savingClip = false)
     {
         CopyVideoFrameButton.IsEnabled = CopyVideoTextButton.IsEnabled = canCapture;
+        Controls.ButtonState.SetIsActive(RecordVideoButton, recording);
         RecordVideoButton.IsEnabled = canRecord;
         RecordVideoLabel.Text = recording ? "Stop recording" : savingClip ? "Saving clip…" : "Record video";
         RecordVideoButton.ToolTip = recording ? "Stop and save the video recording" : "Record the playing video and its source audio; browser is excluded";

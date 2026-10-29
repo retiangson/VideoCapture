@@ -56,6 +56,7 @@ public partial class MainWindow
         {
             _browser = BrowserFactory(_preferences.BrowserOpacity);
             _browser.RestoreTabs(_preferences.BrowserTabs, _preferences.BrowserSelectedTab);
+            _browser.IsVisibleChanged += (_, _) => UpdateFullscreenToolbar();
             _browser.SessionChanged += (_, _) => QueuePreferencesSave();
             _browser.Owner = this;
             _browser.SetMicrophoneSource(_preferences.TranscriptionMicrophone);

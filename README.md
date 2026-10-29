@@ -8,6 +8,10 @@ The player uses a shared dark theme, icon buttons with tooltips/accessibility na
 
 The native Android port is in [android/](android/README.md), with an installable preview build, offline OCR/Whisper, local playback, USB capture integration and touch gestures. It is not yet full Windows parity; see the [Android validation and remaining work](android/PARITY.md). Windows build/install instructions below remain unchanged.
 
+## Active option indicators
+
+Enabled toggles use an accent fill/border and a small status dot; inactive toggles use the neutral surface. Unavailable controls remain dimmed. Highlights follow actual state, including keyboard shortcuts, saved preferences and changes from another panel. Windows covers fullscreen/fill, subtitle reading, timeline, browser visibility, playback, recording and browser transcription controls; Android also highlights the active browser tab and navigation row. **Fill screen** is highlighted when cropping to fill is on; off shows the whole frame.
+
 ## Playlists and player controls
 
 **Open videos** accepts multiple files and plays the first. **Playlist → Add videos** queues files without interrupting current playback; dropping multiple files adds them and starts the first. Double-click a row or select it and press **Play selected** / Enter. The central Play button can also start the selected item after Stop or reopening. Previous/next buttons are available in both the transport bar and fullscreen menu. Reaching the end advances in queue order, skipping missing files. The final item stops rather than looping.

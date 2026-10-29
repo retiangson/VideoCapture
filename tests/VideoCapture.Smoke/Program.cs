@@ -18,6 +18,11 @@ internal static class Program
         try
         {
             if (args is ["--fake-cec", var cecScenario, var cecLog]) return CecTests.RunFake(cecScenario, cecLog);
+            if (args is ["--test-button-states", var stateOutput])
+            {
+                ButtonStateTests.Run(Path.GetFullPath(stateOutput));
+                return 0;
+            }
             if (args is ["--test-cec"])
             {
                 Task.Run(CecTests.RunAsync).GetAwaiter().GetResult();
@@ -62,7 +67,7 @@ internal static class Program
             if (args is ["--test-player", var playerInput, var playerOutput])
             {
                 var playerChecks = PlayerTests.RunAsync(Path.GetFullPath(playerInput), Path.GetFullPath(playerOutput));
-                PumpUntil(() => playerChecks.IsCompleted, "playlist and player interaction checks");
+                PumpUntil(() => playerChecks.IsCompleted, "playlist and player interaction checks", 55);
                 playerChecks.GetAwaiter().GetResult();
                 return 0;
             }

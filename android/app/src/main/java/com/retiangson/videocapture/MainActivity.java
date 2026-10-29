@@ -43,6 +43,8 @@ public final class MainActivity extends ComponentActivity {
   private final Handler main = new Handler(Looper.getMainLooper());
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private FrameLayout root, videoLayer;
+  private final Map<Button, java.util.function.BooleanSupplier> toggleStates =
+      new LinkedHashMap<>();
   private long previewFrames, previewStamp, previewCount;
   private String liveCaption = "LIVE";
   private PlayerView playerView;
@@ -383,23 +385,39 @@ public final class MainActivity extends ComponentActivity {
     more.addView(Ui.button(this, "Mode / FPS", this::chooseMode));
     more.addView(Ui.button(this, "Audio input", this::chooseAudio));
     more.addView(Ui.button(this, "Audio track", this::chooseFileAudio));
-    more.addView(Ui.button(this, "Fit / Fill", this::toggleFit));
-    more.addView(Ui.button(this, "Browser", this::toggleBrowserPanel));
+    addToggle(
+        more,
+        "Fill screen",
+        () -> playerView.getResizeMode() == AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        this::toggleFit);
+    addToggle(
+        more,
+        "Browser",
+        () -> browser != null && browser.getVisibility() == View.VISIBLE,
+        this::toggleBrowserPanel);
     more.addView(Ui.button(this, "Aa Copy text", () -> recognize(false)));
     more.addView(Ui.button(this, "Subtitle track", this::chooseSubtitles));
-    more.addView(Ui.button(this, "Read subtitles", this::toggleReading));
+    addToggle(more, "Read subtitles", () -> reading, this::toggleReading);
     more.addView(Ui.button(this, "Voice", this::chooseVoice));
     more.addView(Ui.button(this, "Licenses", this::licenses));
-    more.addView(Ui.button(this, "Audio to text", this::toggleAudioPanel));
-    more.addView(
-        Ui.button(
-            this,
-            "Timeline",
-            () -> {
-              progress.setVisibility(
-                  progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-              store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
-            }));
+    addToggle(
+        more,
+        "Audio to text",
+        () ->
+            browser != null
+                && browser.getVisibility() == View.VISIBLE
+                && audioPanel != null
+                && audioPanel.getVisibility() == View.VISIBLE,
+        this::toggleAudioPanel);
+    addToggle(
+        more,
+        "Timeline",
+        () -> progress.getVisibility() == View.VISIBLE,
+        () -> {
+          progress.setVisibility(
+              progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+          store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
+        });
     menuBody.addView(Ui.scrollRow(this, more));
     progress.setVisibility(
         Boolean.parseBoolean(store.text("timeline", "true")) ? View.VISIBLE : View.GONE);
@@ -449,6 +467,33 @@ public final class MainActivity extends ComponentActivity {
     gesturesView.setOnGenericMotionListener((v, e) -> adjustWheel(e));
     root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitCapture());
     setFullscreen(false);
+  }
+
+  private void addToggle(
+      LinearLayout row, String label, java.util.function.BooleanSupplier state, Runnable action) {
+    Button button =
+        Ui.button(
+            this,
+            label,
+            () -> {
+              action.run();
+              updateToggleStates();
+            });
+    toggleStates.put(button, state);
+    row.addView(button);
+  }
+
+  private void updateToggleStates() {
+    for (Map.Entry<Button, java.util.function.BooleanSupplier> entry : toggleStates.entrySet())
+      Ui.active(entry.getKey(), entry.getValue().getAsBoolean());
+    Ui.active(fullscreenButton, fullscreen);
+    Ui.active(playButton, player != null && !live && player.isPlaying());
+    boolean recording = recorder != null || pendingLocalClip != null;
+    Ui.active(recordButton, recording);
+    Ui.active(audioStart, audioCapturing || transcribing);
+    if (browser != null)
+      browser.captureStates(
+          recording, audioPanel != null && audioPanel.getVisibility() == View.VISIBLE);
   }
 
   private void showSourceChooser(boolean visible) {
@@ -511,6 +556,7 @@ public final class MainActivity extends ComponentActivity {
     hideMenuButton.setVisibility(value ? View.VISIBLE : View.GONE);
     fullscreenButton.setText(value ? "Exit fullscreen" : "Fullscreen");
     layoutSourceChooser();
+    updateToggleStates();
     WindowInsetsControllerCompat controller =
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
     if (value) {
@@ -973,7 +1019,7 @@ public final class MainActivity extends ComponentActivity {
     int width = videoLayer.getWidth(), height = videoLayer.getHeight();
     if (width <= 0 || height <= 0) return;
     float scale =
-        Boolean.parseBoolean(store.text("fill", "true"))
+        Boolean.parseBoolean(store.text("fill", "false"))
             ? Math.max(width / (float) captureSize.width, height / (float) captureSize.height)
             : Math.min(width / (float) captureSize.width, height / (float) captureSize.height);
     FrameLayout.LayoutParams p =
@@ -986,7 +1032,7 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void toggleFit() {
-    boolean fill = !Boolean.parseBoolean(store.text("fill", "true"));
+    boolean fill = playerView.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_ZOOM;
     store.put("fill", Boolean.toString(fill));
     playerView.setResizeMode(
         fill ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);
@@ -1217,6 +1263,7 @@ public final class MainActivity extends ComponentActivity {
     recordButton.setText(label.startsWith("●") ? "●" : label.startsWith("■") ? "■" : "…");
     recordButton.setContentDescription(label);
     recordButton.setTooltipText(label);
+    updateToggleStates();
   }
 
   private void record() {
@@ -1676,6 +1723,10 @@ public final class MainActivity extends ComponentActivity {
               this,
               store,
               new BrowserOverlay.Host() {
+                public void stateChanged() {
+                  updateToggleStates();
+                }
+
                 public void permission(Consumer<Boolean> result) {
                   requestMic(result);
                 }
@@ -1711,6 +1762,7 @@ public final class MainActivity extends ComponentActivity {
     else if (browser.getVisibility() != View.VISIBLE) browser.toggle();
     if (audioPanel == null) buildAudioPanel();
     audioPanel.setVisibility(audioPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+    updateToggleStates();
   }
 
   private void buildAudioPanel() {
@@ -2024,6 +2076,7 @@ public final class MainActivity extends ComponentActivity {
       new Runnable() {
         public void run() {
           if (closed) return;
+          updateToggleStates();
           if (player != null && !live) {
             long duration = Math.max(0, player.getDuration()),
                 time = Math.max(0, player.getCurrentPosition());

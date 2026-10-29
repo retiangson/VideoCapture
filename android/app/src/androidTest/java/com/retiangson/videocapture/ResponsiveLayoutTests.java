@@ -134,6 +134,87 @@ public final class ResponsiveLayoutTests {
     }
   }
 
+  private static Button button(View view, String label) {
+    if (view instanceof Button && label.contentEquals(((Button) view).getText()))
+      return (Button) view;
+    if (view instanceof android.view.ViewGroup) {
+      android.view.ViewGroup group = (android.view.ViewGroup) view;
+      for (int i = 0; i < group.getChildCount(); i++) {
+        Button found = button(group.getChildAt(i), label);
+        if (found != null) return found;
+      }
+    }
+    return null;
+  }
+
+  @Test
+  public void optionHighlightsFollowStateAndSavedPreferences() throws Exception {
+    Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+    context
+        .getSharedPreferences("player", Context.MODE_PRIVATE)
+        .edit()
+        .putString("timeline", "false")
+        .putString("fill", "true")
+        .putString("reading", "true")
+        .commit();
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            View menu = (View) field(a, "menu");
+            Button fill = button(menu, "Fill screen"),
+                timeline = button(menu, "Timeline"),
+                reading = button(menu, "Read subtitles");
+            assertTrue(fill.isSelected());
+            assertFalse(timeline.isSelected());
+            assertTrue(reading.isSelected());
+            fill.performClick();
+            timeline.performClick();
+            reading.performClick();
+            assertFalse(fill.isSelected());
+            assertTrue(timeline.isSelected());
+            assertFalse(reading.isSelected());
+            assertEquals("Off", androidx.core.view.ViewCompat.getStateDescription(fill));
+            fill.setEnabled(false);
+            assertEquals(.35f, fill.getAlpha(), .01f);
+            fill.setEnabled(true);
+            assertEquals(1f, fill.getAlpha(), .01f);
+            Button browser = button(menu, "Browser");
+            browser.performClick();
+            assertTrue(browser.isSelected());
+            BrowserOverlay overlay = (BrowserOverlay) field(a, "browser");
+            overlay.setVisibility(View.GONE);
+            assertFalse(browser.isSelected());
+            Button audio = button(menu, "Audio to text");
+            audio.performClick();
+            assertTrue(audio.isSelected());
+            BrowserOverlay panel = (BrowserOverlay) field(a, "browser");
+            assertTrue(((Button) field(panel, "transcriptionButton")).isSelected());
+            audio.performClick();
+            assertFalse(audio.isSelected());
+            Button nav = (Button) field(panel, "navigationButton");
+            nav.performClick();
+            assertTrue(nav.isSelected());
+            nav.performClick();
+            assertFalse(nav.isSelected());
+            Button full = (Button) field(a, "fullscreenButton");
+            full.performClick();
+            assertTrue(full.isSelected());
+            full.performClick();
+            assertFalse(full.isSelected());
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            View menu = (View) field(a, "menu");
+            assertFalse(button(menu, "Fill screen").isSelected());
+            assertTrue(button(menu, "Timeline").isSelected());
+            assertFalse(button(menu, "Read subtitles").isSelected());
+          });
+    }
+  }
+
   @Test
   public void controlsFitAndBrowserMaximizeRestoresWithinWindow() throws Exception {
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {

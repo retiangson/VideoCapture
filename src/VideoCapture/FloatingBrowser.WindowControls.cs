@@ -47,6 +47,8 @@ public partial class FloatingBrowser
     private void UpdateWindowButtons()
     {
         if (MaximizeButton is null) return;
+        Controls.ButtonState.SetIsActive(MaximizeButton, WindowState == WindowState.Maximized && !IsBrowserFullscreen);
+        Controls.ButtonState.SetIsActive(BrowserFullscreenButton, IsBrowserFullscreen);
         MaximizeButton.Content = IsBrowserFullscreen || WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
         MaximizeButton.ToolTip = IsBrowserFullscreen || WindowState == WindowState.Maximized ? "Restore" : "Maximize";
         BrowserFullscreenButton.ToolTip = IsBrowserFullscreen ? "Exit fullscreen (F11 / Esc)" : "Fullscreen (F11)";

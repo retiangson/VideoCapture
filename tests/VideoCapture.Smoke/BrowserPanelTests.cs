@@ -10,6 +10,7 @@ using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
 using VideoCapture;
 using VideoCapture.Services;
+using VideoCapture.Controls;
 
 internal static class BrowserPanelTests
 {
@@ -47,6 +48,7 @@ internal static class BrowserPanelTests
             if (!browser.IsVisible || window.FloatingToolbar?.IsVisible != true) throw new Exception("Browser and player toggles must be independent.");
             if (((Button)browser.FindName("CopyVideoFrameButton")).IsEnabled || ((Button)browser.FindName("RecordVideoButton")).IsEnabled)
                 throw new Exception("Video actions must be disabled without video.");
+            if (!ButtonState.GetIsActive((Button)window.FindName("BrowserButton")) || !ButtonState.GetIsActive((Button)window.FloatingToolbar!.FindName("BrowserButton"))) throw new Exception("Browser visibility must highlight both player buttons.");
             await browser.Initialization.WaitAsync(TimeSpan.FromSeconds(25));
             if (browser.ActiveBrowser?.CoreWebView2 is null) throw new Exception("Browser initialization failed.");
             var outsideWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent };
@@ -73,6 +75,7 @@ internal static class BrowserPanelTests
             ((Slider)browser.FindName("Transparency")).Value = 1;
             var windowed = new Rect(browser.Left, browser.Top, browser.Width, browser.Height);
             Press(browser, "MaximizeButton");
+            if (!ButtonState.GetIsActive((Button)browser.FindName("MaximizeButton"))) throw new Exception("Maximize button state is stale.");
             if (browser.WindowState != WindowState.Maximized) throw new Exception("Browser maximize failed.");
             Press(browser, "MaximizeButton");
             if (browser.WindowState != WindowState.Normal) throw new Exception("Browser restore failed.");
@@ -81,7 +84,9 @@ internal static class BrowserPanelTests
             browser.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
             if (Math.Abs(browser.Opacity - .95) > .001) throw new Exception("Empty fullscreen browser chrome must adjust opacity.");
             ((Slider)browser.FindName("Transparency")).Value = 1;
+            if (!ButtonState.GetIsActive((Button)browser.FindName("BrowserFullscreenButton"))) throw new Exception("Browser fullscreen state missing.");
             SendKey(browser, Key.Escape);
+            if (ButtonState.GetIsActive((Button)browser.FindName("BrowserFullscreenButton"))) throw new Exception("Esc did not clear browser fullscreen state.");
             if (browser.IsBrowserFullscreen || Math.Abs(browser.Width - windowed.Width) > 2 || Math.Abs(browser.Height - windowed.Height) > 2) throw new Exception("Fullscreen exit must restore browser size.");
             Press(browser, "MinimizeButton");
             if (browser.WindowState != WindowState.Minimized) throw new Exception("Browser minimize failed.");
@@ -162,9 +167,11 @@ internal static class BrowserPanelTests
             Press(browser, "AudioTextButton");
             browser.UpdateLayout(); await Task.Delay(250);
             if (!((Expander)browser.FindName("TranscriptPanel")).IsVisible || !((Expander)browser.FindName("TranscriptPanel")).IsExpanded) throw new Exception("Audio to text must show the expanded transcript controls.");
+            if (!ButtonState.GetIsActive((Button)browser.FindName("AudioTextButton"))) throw new Exception("Transcript panel button must highlight while shown.");
             Capture(browser, Path.Combine(output, "browser-video-panel-expanded.png"));
             if (((FrameworkElement)browser.FindName("BrowserHost")).ActualHeight < 100) throw new Exception("Expanded controls must leave usable page space.");
             Click(overlay, MouseButton.Right);
+            if (ButtonState.GetIsActive((Button)window.FindName("BrowserButton"))) throw new Exception("Hiding browser did not clear the main toggle state.");
             if (browser.IsVisible || !player.IsPlaying) throw new Exception("Browser hide must leave video playing.");
             CheckActionEvents(output);
             Click(overlay, MouseButton.Right);

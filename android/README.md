@@ -24,9 +24,13 @@ The minified/shrunk preview uses the local **debug signing key**, package `com.r
 
 The APK contains both ABIs and the offline model (~218 MiB). First transcription copies the model into private storage (~181 MiB extra) and loads it on demand; playback startup does not initialize Whisper, OCR, TTS, or the browser. Small transcription models trade accuracy for speed; this preview uses multilingual Whisper small q5_1 and up to four CPU threads. Actual transcription speed depends on the device.
 
+## Active options
+
+Toggle buttons have an accent background/border and a small marker when on, plus an accessible On/Off state. Off uses the neutral background; unavailable buttons are dimmed. Fullscreen, Fill screen, subtitle reading, timeline, browser visibility, audio transcript visibility, playback/recording, browser navigation/maximize and active tabs reflect actual state. Saved options restore their highlights; hiding a browser from its own controls also updates the player button. Fill defaults to off consistently for local and USB video; existing saved settings are retained.
+
 ## Phone layouts
 
-Version 0.2.1 keeps playback/recording controls in a dedicated row and uses horizontally scrollable rows for secondary actions. Buttons have 48 dp touch targets; short windows get a vertically scrollable player panel capped at 75% of available height. The browser fits within the actual window, clamps dragging to its bounds, and reflows when rotated or when the keyboard opens. Its address field has compact navigation buttons. Browser tools/transcription scroll independently so they remain reachable without displacing the entire web page. Maximize/restore uses the current window and system/keyboard insets.
+Version 0.2.2 keeps playback/recording controls in a dedicated row and uses horizontally scrollable rows for secondary actions. Buttons have 48 dp touch targets; short windows get a vertically scrollable player panel capped at 75% of available height. The browser fits within the actual window, clamps dragging to its bounds, and reflows when rotated or when the keyboard opens. Its address field has compact navigation buttons. Browser tools/transcription scroll independently so they remain reachable without displacing the entire web page. Maximize/restore uses the current window and system/keyboard insets.
 
 This improves layouts; it does not add background recording or built-in camera capture. Real phones still need device/USB/audio validation. USB capture requires OTG/USB host support and sufficient power for the card.
 
@@ -60,6 +64,6 @@ adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-android
 adb shell am instrument -w -r -e requireOffline true com.retiangson.videocapture.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Use `adb -s SERIAL` with multiple devices. Instrumentation clears the **debug package's** preferences and uses synthetic media; run it on a disposable test profile. Require the final `OK (16 tests)`; `adb shell am instrument` may exit with code zero even when tests fail. Tests exercise native touchscreen gestures, real decoding/resume, browser restoration and exact-origin mic grant/deny, offline OCR/Whisper, selected audio extraction, embedded MKV text cues, local clip export, source-only EGL surface recording with PCM, rejection of microphone fallback, window bounds, keyboard insets, maximize/restore and live rotation. A headless emulator can grant browser mic permission yet report no readable microphone; physical browser mic capture remains a tablet check.
+Use `adb -s SERIAL` with multiple devices. Instrumentation clears the **debug package's** preferences and uses synthetic media; run it on a disposable test profile. Require the final `OK (17 tests)`; `adb shell am instrument` may exit with code zero even when tests fail. Tests exercise native touchscreen gestures, real decoding/resume, browser restoration and exact-origin mic grant/deny, offline OCR/Whisper, selected audio extraction, embedded MKV text cues, local clip export, source-only EGL surface recording with PCM, rejection of microphone fallback, window bounds, keyboard insets, maximize/restore and live rotation. A headless emulator can grant browser mic permission yet report no readable microphone; physical browser mic capture remains a tablet check.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependencies and source/license links.

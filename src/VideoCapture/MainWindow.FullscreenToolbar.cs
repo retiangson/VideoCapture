@@ -67,6 +67,14 @@ public partial class MainWindow
 
     private void UpdateFullscreenToolbar()
     {
+        // Clip exports can complete after native playback has been disposed during shutdown.
+        if (_closing) return;
+        Controls.ButtonState.SetIsActive(BrowserButton, _browser?.IsVisible == true);
+        Controls.ButtonState.SetIsActive(FullscreenButton, _fullscreen);
+        Controls.ButtonState.SetIsActive(PauseButton, _session?.Player.IsPlaying == true);
+        Controls.ButtonState.SetIsActive(RecordButton, IsVideoRecording);
+        _fullscreenToolbar?.SetFullscreenActive(_fullscreen);
+        _fullscreenToolbar?.SetBrowserVisible(_browser?.IsVisible == true);
         _fullscreenToolbar?.SetFillMode(PictureFit.SelectedIndex == 1);
         _fullscreenToolbar?.SetSpeechEnabled(SpeechEnabled.IsChecked == true);
         _fullscreenToolbar?.SetLevels(MenuOpacity.Value, Volume.Value, SpeechVolume.Value);

@@ -12,6 +12,8 @@ import java.util.function.Consumer;
 
 final class BrowserOverlay extends LinearLayout {
   interface Host {
+    default void stateChanged() {}
+
     void permission(Consumer<Boolean> result);
 
     void feedback(String value);
@@ -48,6 +50,7 @@ final class BrowserOverlay extends LinearLayout {
   private float downX, downY, startX, startY;
   private long lastTap;
   private SeekBar opacity;
+  private Button maximizeButton, navigationButton, recordingButton, transcriptionButton;
 
   BrowserOverlay(Activity activity, PlayerStore store, Host host) {
     super(activity);
@@ -68,7 +71,8 @@ final class BrowserOverlay extends LinearLayout {
     opacity.setContentDescription("Browser panel opacity");
     title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 80), Ui.dp(activity, 48)));
     title.addView(Ui.iconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
-    title.addView(Ui.iconButton(activity, "□", "Maximize or restore browser", this::maximize));
+    maximizeButton = Ui.iconButton(activity, "□", "Maximize or restore browser", this::maximize);
+    title.addView(maximizeButton);
     title.addView(Ui.iconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
     addView(title);
     grip.setOnTouchListener(
@@ -110,11 +114,14 @@ final class BrowserOverlay extends LinearLayout {
     toolsScroll = new ScrollView(activity);
     toolsScroll.addView(tools, new ScrollView.LayoutParams(-1, -2));
     addView(toolsScroll, new LinearLayout.LayoutParams(-1, -2));
-    Button nav =
+    navigationButton =
         Ui.button(
             activity,
             "⌕  Navigation",
-            () -> navigation.setVisibility(navigation.getVisibility() == VISIBLE ? GONE : VISIBLE));
+            () -> {
+              navigation.setVisibility(navigation.getVisibility() == VISIBLE ? GONE : VISIBLE);
+              Ui.active(navigationButton, navigation.getVisibility() == VISIBLE);
+            });
 
     navigation.addView(
         Ui.iconButton(
@@ -158,11 +165,13 @@ final class BrowserOverlay extends LinearLayout {
     tools.addView(navigation);
     navigation.setVisibility(GONE);
     LinearLayout actions = Ui.row(activity);
-    actions.addView(nav);
+    actions.addView(navigationButton);
     actions.addView(Ui.button(activity, "▣ Frame", host::frame));
-    actions.addView(Ui.button(activity, "● Record", host::record));
+    recordingButton = Ui.button(activity, "● Record", host::record);
+    actions.addView(recordingButton);
     actions.addView(Ui.button(activity, "Aa Text", host::ocr));
-    actions.addView(Ui.button(activity, "♫ Audio to text", host::audio));
+    transcriptionButton = Ui.button(activity, "♫ Audio to text", host::audio);
+    actions.addView(transcriptionButton);
     tools.addView(Ui.scrollRow(activity, actions), 0);
     int savedIndex = 0;
     try {
@@ -333,6 +342,7 @@ final class BrowserOverlay extends LinearLayout {
       final int index = i;
       LinearLayout tab = Ui.row(activity);
       Button title = Ui.button(activity, titles.get(i), () -> select(index));
+      Ui.active(title, i == selected);
       title.setTextSize(10);
       title.setSingleLine(true);
       title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -401,6 +411,17 @@ final class BrowserOverlay extends LinearLayout {
       }
     }
     return super.dispatchGenericMotionEvent(event);
+  }
+
+  @Override
+  protected void onVisibilityChanged(View changedView, int visibility) {
+    super.onVisibilityChanged(changedView, visibility);
+    if (host != null) host.stateChanged();
+  }
+
+  void captureStates(boolean recording, boolean transcriptVisible) {
+    Ui.active(recordingButton, recording);
+    Ui.active(transcriptionButton, transcriptVisible);
   }
 
   void setTranscriptPanel(View panel) {
@@ -498,6 +519,7 @@ final class BrowserOverlay extends LinearLayout {
       p.topMargin = Math.round(oldY);
     }
     maximized = !maximized;
+    Ui.active(maximizeButton, maximized);
     setLayoutParams(p);
     layoutWithinParent();
   }

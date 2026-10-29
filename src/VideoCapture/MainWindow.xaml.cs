@@ -547,6 +547,7 @@ public partial class MainWindow : Window
             HideFullscreenToolbar();
         }, DispatcherPriority.Loaded);
         else HideFullscreenToolbar();
+        UpdateFullscreenToolbar();
     }
 
     private void Video_MouseDown(object sender, MouseButtonEventArgs e)

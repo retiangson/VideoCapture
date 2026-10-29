@@ -41,6 +41,11 @@ internal static class PlayerTests
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Menu must start hidden.");
             window.ToggleFullscreenToolbar();
             var toolbar = window.FloatingToolbar!;
+            if (!ButtonState.GetIsActive((Button)toolbar.FindName("FitButton")) || !ButtonState.GetIsActive((Button)toolbar.FindName("ExitButton"))) throw new Exception("Fullscreen/fill state must reflect keyboard entry.");
+            var timeline=(Button)toolbar.FindName("ProgressButton");
+            timeline.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (ButtonState.GetIsActive(timeline) != toolbar.ProgressVisible) throw new Exception("Timeline state is not synchronized.");
+            timeline.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             if (Math.Abs(toolbar.Opacity - 0.58) > 0.01) throw new Exception("Entire menu opacity must restore from preferences.");
             CheckPointSelection((Slider)toolbar.FindName("OpacitySlider"), 0.5);
             if (Math.Abs(toolbar.Opacity - 0.675) > 0.02 || Math.Abs(((Slider)window.FindName("MenuOpacity")).Value - toolbar.Opacity) > 0.01)
@@ -50,6 +55,12 @@ internal static class PlayerTests
             SendKey(window, Key.Escape);
             await window.OpenFileAsync(input);
             await WaitAsync(() => window.PresentedFrameCount >= 3, "first playlist video");
+            var play=(Button)window.FindName("PauseButton");
+            await WaitAsync(() => ButtonState.GetIsActive(play), "playing highlight");
+            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitAsync(() => !ButtonState.GetIsActive(play), "paused highlight");
+            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitAsync(() => ButtonState.GetIsActive(play) && ((Button)window.FindName("NextButton")).IsEnabled, "resume highlight");
             ((Button)window.FindName("NextButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await WaitAsync(() => window.Playlist.Current?.Path == second && window.PresentedFrameCount >= 3, "next video");
             ((Button)window.FindName("PreviousButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
