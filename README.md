@@ -10,9 +10,43 @@ The player uses a shared dark theme, icon buttons with tooltips/accessibility na
 
 Use the up/down buttons to reorder, the trash button or Delete to remove a selected row, and **Clear** to empty the queue. Removing the currently playing item or clearing an active local playlist stops that local playback. These actions never delete video files. Duplicate paths are ignored, and the queue supports up to 200 entries. The ordered playlist and selection are saved with preferences; reopening restores the queue without automatically playing a movie. Saved live capture still resumes as configured.
 
-Volume and opacity sliders jump directly to the clicked point and support dragging from that point. **Menu opacity** in Capture settings or the fullscreen menu controls the opacity of the entire floating menu, including its text, icons, and sliders (35–100%); the value is remembered. **Browser opacity** remains independent. The fullscreen menu starts hidden, toggles with right-click, and opens near the bottom center; drag its grip to reposition it. Its Playlist button returns to the windowed playlist manager.
+Volume and opacity sliders jump directly to the clicked point and support dragging from that point. **Menu opacity** in Capture settings or the fullscreen menu controls the opacity of the entire floating menu, including its text, icons, and sliders (35–100%); the value is remembered. **Browser opacity** remains independent. The fullscreen menu starts hidden, opens with a held left-click, hides with a quick left-click, and appears near the bottom center; drag its grip to reposition it. Its Playlist button returns to the windowed playlist manager.
 
 Player interaction checks: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-player artifacts/sample.mp4 artifacts/player-smoke`. This verifies queue ordering/deduplication, retained playlists, previous/next, automatic advance past a missing entry, click-position slider values, and full-menu opacity synchronization.
+
+The fullscreen menu includes a click/drag seek bar with elapsed and total time.
+**Timeline** hides/shows that bar and remembers the choice. Seeking is available
+for seekable local videos; HDMI capture shows **LIVE**. The menu still starts
+hidden and opens with a held left-click.
+
+**Video** and **Reading** volume sliders are always visible in the windowed
+player and in the floating fullscreen menu. Each volume is saved independently.
+Reading volume adjusts the Windows voice without restarting its current line;
+the Speech tab offers the same synchronized reading-volume setting.
+
+## Resume local videos
+
+Opening a previously played file automatically resumes its saved position once
+the player is ready to seek. History loads without autoplaying a movie. Playback
+positions are checkpointed every five seconds and saved on pause, stop, file or
+capture-source switches, and normal app exit. An abrupt shutdown can lose the
+last few seconds since the latest completed checkpoint.
+
+History is a local, atomically replaced JSON file at
+`%LOCALAPPDATA%/VideoCapture/playback-history.json`; no database server or
+internet connection is used. It retains up to 1,000 recent file entries within
+a 4 MB storage limit, including files removed from the playlist. File paths
+match without regard to case; size and modification time must also match so
+modified/replaced files normally start fresh. Moving or renaming a file gives
+it a new history entry. Live capture is excluded. Finished videos, including
+the final 2% (at most ten seconds), restart at the beginning. Non-seekable files
+continue at their current position if resume is unavailable.
+
+To restart a video manually, seek to the beginning. To clear all resume history,
+close the app and delete `playback-history.json`. Corrupt or oversized history
+falls back to an empty history with a diagnostic and does not prevent playback.
+
+Resume/control checks: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-resume artifacts/sample.mp4 artifacts/resume-smoke`.
 
 ## Run
 
@@ -56,15 +90,85 @@ Fullscreen covers the complete physical bounds of the monitor containing the app
 
 UVC live capture uses square pixels and the selected capture raster's proportions. The tested USB3 Video driver advertised a 1920×1080 stream with incorrect 4:3 display-aspect metadata, causing pillarboxing and vertical stretching. Live capture corrects that declaration to 16:9 for 1920×1080. Local movie files retain their own pixel-aspect metadata. Legacy anamorphic analog capture may require a different pixel-aspect policy.
 
-The fullscreen floating toolbar starts hidden. **Right-click the video** to show or hide it, or choose **Hide controls** on the toolbar. It is draggable and provides recording, snapshots, text recognition, CEC, browser, picture-fit, and exit controls. It hides when leaving fullscreen and closes with the app. Record controls operate on a selected capture device, and are disabled during local movie playback. **Copy frame** (also available outside fullscreen) places the current video picture on the Windows clipboard as an image and PNG; paste with `Ctrl+V`. It captures the video, excluding app controls. **Save frame** writes a PNG to a chosen location. **Copy recording** places the last completed recording on the clipboard as a file, for pasting into Explorer or apps accepting video files. Recordings are not automatically placed on the clipboard.
+The fullscreen floating toolbar starts hidden. **Hold left-click on the video for 450 ms** to show it; a quick left-click hides it, or choose **Hide controls** on the toolbar. Scroll over the floating player menu to change its whole-panel opacity by 5 percentage points per notch (35–100%). Scrolling over the main app, including capture settings and video, adjusts the visible browser opacity (30–100%); if only the player menu is visible, it adjusts that menu instead. Browser-page scrolling is unchanged. It is draggable and provides recording, snapshots, text recognition, CEC, browser, picture-fit, and exit controls. It hides when leaving fullscreen and closes with the app. The main Record live button starts capture-device recording; it can also stop an active local clip started from the browser panel. **Copy frame** (also available outside fullscreen) places the current video picture on the Windows clipboard as an image and PNG; paste with `Ctrl+V`. It captures the video, excluding app controls. **Save frame** writes a PNG to a chosen location. **Copy recording** places the last completed recording on the clipboard as a file, for pasting into Explorer or apps accepting video files. Recordings are not automatically placed on the clipboard.
 
 Shortcuts: `Ctrl+Shift+C` copies the video frame, `Ctrl+Shift+T` copies video text, `Ctrl+Shift+X` selects screen text, `Ctrl+Shift+B` hides/shows the browser, `Ctrl+Shift+R` starts/stops capture recording, and `Esc` exits fullscreen from the video or toolbar. Shortcuts work while the corresponding VideoCapture window has focus. Copying images or text does not stop an active recording.
 
 **Copy video text (OCR)** recognizes English text from a native video snapshot and copies plain Unicode text for pasting. **Copy screen text…** takes a temporary desktop bitmap, lets you drag a rectangle over visible text, and copies recognized text from that rectangle. `Esc` cancels selection. The toolbar hides during screen selection and then restores its previous visibility; visible browser content remains available for selection. Images are processed locally in memory; video snapshots use a temporary PNG that is deleted afterward. No OCR service or account is used. Empty recognition or cancellation preserves the clipboard. The bundled Tesseract English model is in `tessdata`; OCR may misread small/blurred text and currently does not offer other languages.
 
-**Browser** opens a draggable, resizable Chromium/WebView2 window at **https://chatgpt.com/**. Use **+** or `Ctrl+T` for a new ChatGPT tab, click a tab to switch, and use **×** or `Ctrl+W` to close it. `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs; `Ctrl+L` focuses the address bar. Closing the last tab opens a fresh ChatGPT tab. Each tab has its own page and navigation history; back/forward/reload and the address bar apply to the selected tab. Sign-in popups and links requesting a new window open as tabs and preserve their opener relationship.
+**Browser** opens a draggable, resizable Chromium/WebView2 window at **https://chatgpt.com/**. Use **+** or `Ctrl+T` for a new ChatGPT tab, click a tab to switch, and use **×** or `Ctrl+W` to close it. `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs; `Ctrl+L` expands navigation and focuses the address bar. Closing the last tab opens a fresh ChatGPT tab. Each tab has its own page and navigation history; back/forward/reload and the address bar apply to the selected tab. Sign-in popups and links requesting a new window open as tabs and preserve their opener relationship.
 
-Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Closing the application closes the tabs; the next browser window starts at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Downloads and website permission requests remain disabled. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
+In fullscreen, **right-click the video** to show/hide the browser independently
+of the player menu. Clicks inside a browser page keep their normal browser
+behavior. Double-clicking the video still enters/exits fullscreen.
+
+The browser window includes **Copy frame**, **Record video**, **Copy video text**,
+and **Panel opacity** together. Frame capture and OCR operate on the video
+source and copy to the clipboard. They exclude the browser, player controls,
+and other desktop windows. Panel opacity applies to the complete browser window,
+including its action bar and page, and retains the existing saved opacity.
+Hiding the browser preserves tabs and does not stop playback or recording.
+
+**Record video** records HDMI capture using the existing video/audio pipeline.
+For a local file, it marks the current playback position and saves the played
+segment when recording stops, without restarting playback. Pauses add no frozen
+frames to a local clip. Seeking, opening another source, and playlist changes
+are disabled while marking a clip; pausing, copying frames/text, and hiding the
+panel remain available. Stop, end-of-file, and normal app close finalize a pending
+clip. A crash before finalization cannot save an unfinished local clip.
+
+Local clips are exported to the Videos/VideoCapture folder as H.264/AAC MKV
+files, with source audio when available. They exclude browser content, desktop
+audio, and synthesized subtitle speech. Export is local and runs in a hidden
+FFmpeg process; long/high-resolution clips can take time to save. Playback,
+seeking, browser interaction and the other controls remain available while a
+clip saves; another local recording waits for that export to finish. Pending output
+uses a temporary filename and becomes the final clip only on success. Clips
+require the original source file to remain available and unchanged. Local-file
+subtitles are not burned into the exported clip; HDMI captions already present
+in the captured image remain part of that source.
+
+Browser action/click checks (isolated browser profile and generated media):
+`dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-panel artifacts/sample.mp4 artifacts/browser-panel-smoke`.
+
+Browser tabs use compact 24-pixel headers, shorter titles with ellipses/tooltips,
+and small close/new-tab buttons. Tabs and panel opacity stay above the page; capture tools and navigation sit below it. Navigation starts collapsed (Ctrl+L also opens it). The Audio transcript section is hidden until **Audio to text** is clicked; clicking the same button again hides it without stopping capture or recognition. Transcript updates never force the panel open. Keyboard tab shortcuts remain available.
+
+### Video audio to text
+
+Open **Audio to text** to choose a source and transcription language. **Auto detect · Whisper** and **English · Whisper** use the bundled offline model. Select **Video audio** for the playing video or **Microphone** for the default Windows input device (video playback is optional). Choose **Start capture**, then **Stop & transcribe** after the passage you want. Capture
+stops automatically after two minutes. The resulting transcript is editable;
+choose **Copy transcript** and paste with `Ctrl+V`. Cancelling, errors, or empty
+recognition preserve the previous transcript and do not overwrite the clipboard.
+
+Microphone final transcription uses the bundled multilingual Whisper small q5_1 model through FFmpeg/whisper.cpp. It runs on the CPU locally after Stop & transcribe; it does not send audio to a server or require an account. Choose English explicitly when speaking English to avoid short-clip language-detection mistakes. Video audio uses Whisper for Whisper language options, or Windows desktop dictation for an installed Windows language option. Text-to-speech voices are separate. Recognition can still mishear accents, noise, or overlapping speakers; review the result before copying.
+
+The model is approximately 190 MB, loaded by an on-demand worker after capture stops; it does not slow initial app startup. Restore the pinned, SHA256-verified model with `./tools/Setup-SpeechModel.ps1` before building/publishing from Git. The distributed app already includes it, so normal use works offline. Setup uses the network only to download the public model.
+
+Transcripts stay in memory until the app closes and survive browser hide/show.
+
+**Video audio** uses only the selected video's source audio, before playback-volume adjustment. Microphone input, browser audio, other desktop sound and synthesized subtitle reading are excluded from that source. **Microphone** opens the default Windows microphone only after Start capture; WASAPI records a private temporary 16 kHz mono PCM WAV for local Whisper decoding. That temporary audio is deleted on completion, cancellation, or normal close. A crash can leave an owned temporary file. No playback or speaker-monitor stream is opened by the microphone recorder. It stops after two minutes, on Stop & transcribe, Cancel, or app close. Windows microphone privacy permissions and a working default input device are required; failures appear in the transcript panel. The live meter shows input reaching the recognizer, and identifies the input device. Final words appear after Stop & transcribe. Stop & transcribe puts the final result in the editable transcript. Input settings opens Windows sound settings to choose/test the default microphone. Empty results distinguish missing input signal from unrecognized speech; choose a language matching your speech and check input volume/mute settings. The source selection is remembered. To prevent echo, live-preview sound is temporarily suppressed during microphone capture. If the preview is using the same microphone, its **Monitor capture audio** setting is turned off and saved; enable it only when monitoring is intentional. This affects playback through speakers, not source recordings/transcription. For HDMI movie sound, select the capture card audio device instead of the PC microphone. Local files are sampled from the marked playback range;
+the selected playback audio track is used. Live HDMI capture needs its audio
+input selected and briefly reconnects preview to start/finish an audio-only WAV
+capture. Source/seek changes and video recording are disabled while capturing
+audio. Playback and other actions are available again during recognition.
+
+Stop/end-of-file transcribes a pending passage. Cancel discards the current
+capture; closing the app cancels audio capture/recognition. Temporary PCM audio
+files are deleted after recognition/cancellation or shutdown; a device that is
+still releasing a file can defer deletion until shutdown. Recognition errors
+appear in the transcript panel. Device disconnects interrupt an active capture
+and require a new capture after recovery.
+
+Offline dictation tests use synthesized speech without playing it or accessing
+the microphone:
+`dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-transcription artifacts/transcription-smoke`.
+Set `VIDEOCAPTURE_TEST_MICROPHONE=1` to additionally exercise the actual default microphone briefly (start, graceful stop, cancellation/release, and no-video capture); its transcript is not saved or printed.
+They also exercise source-audio extraction/tapping, silence, in-flight
+cancellation, compact tabs, pause preservation and editable transcripts. Set
+`VIDEOCAPTURE_TEST_CLIPBOARD=1` to verify copying and restore the prior clipboard.
+
+Enter an HTTP/HTTPS address and adjust browser opacity between 30% and 100%. **Hide** or `Ctrl+Shift+B` preserves all open tabs and their state. Normal app close saves up to 32 HTTP/HTTPS tab addresses and the active tab; reopening the browser restores them on demand. Restarting reloads pages and does not restore form drafts or navigation history. Tab URLs are stored locally in settings.json. New sessions without saved tabs start at ChatGPT. All tabs share the existing cookies, login sessions, cache, and website storage under `%LOCALAPPDATA%/VideoCapture/BrowserProfile`; this does not share a Chrome profile or extensions. Double-click the browser title bar or press F11 to enter/exit full-monitor fullscreen; Esc exits it. Buttons beside panel opacity provide minimize, maximize/restore, and fullscreen/restore. Scrolling over browser chrome (including capture actions, navigation/address bar, and empty fullscreen borders) adjusts whole-panel opacity by 5 percentage points per wheel notch, clamped to 30–100%; scrolling over web content is unchanged. Page double-clicks keep their normal website behavior. The browser closes with the app and stays above video while VideoCapture is foreground in fullscreen. Microphone access is allowed for directly opened HTTPS ChatGPT pages (`chatgpt.com` and legacy `chat.openai.com`) when the requesting origin matches the top-level page. Old saved microphone denials for those two origins are reset when a tab initializes; each request is checked again without storing a blanket grant. Other origins, embedded cross-origin requests, camera/location permissions, and downloads remain blocked. Windows must still allow desktop microphone access. Use ChatGPT’s microphone/voice controls to start and stop its microphone; this website feature is separate from the app’s offline Audio to text panel. The English OCR engine and language data use Apache 2.0 licensing; the model license is included under `tessdata/LICENSE`. WebView2 is subject to Microsoft's runtime/SDK terms.
 
 Overlay verification: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-overlays artifacts/overlay-smoke` checks OCR against known text/blank images, crop bounds, browser URI validation, initialization, DOM interaction, opacity property, and hide/show state. Set `VIDEOCAPTURE_TEST_CLIPBOARD=1` to check real text clipboard round-tripping (restoring prior contents) and desktop bitmap dimensions. `VIDEOCAPTURE_TEST_INPUT=1` additionally attempts native input in the test window; it fails safely if that window cannot gain foreground focus.
 
@@ -86,6 +190,7 @@ Licenses, source references, and build configuration remain in `Tools/Media`.
 
 ```powershell
 ./tools/Setup-MediaTools.ps1 -FFmpegDirectory 'C:\Tools\ffmpeg-8.1.1-full_build\bin'
+./tools/Setup-SpeechModel.ps1
 ```
 
 ```powershell
@@ -146,7 +251,8 @@ readable embedded text, the reader uses offline OCR of the visible video. Turn
 on subtitles on the source device for HDMI capture. The default OCR region is
 the bottom 35%; choose bottom 50% or the whole picture for other layouts. Image
 tracks selected in the app are enabled in the player so OCR can see them. Use
-**Fit** if **Fill** crops captions. This does not transcribe spoken audio.
+**Fit** if **Fill** crops captions. For spoken-audio transcription, use
+**Audio to text** in the browser panel.
 
 OCR currently recognizes English. It samples at most roughly once per second
 and requires two matching observations, so very brief captions can be missed;
@@ -210,3 +316,5 @@ Protocol/process failure checks (using a simulated client, without CEC hardware)
 ```powershell
 dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-cec
 ```
+
+Browser microphone verification: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-microphone artifacts/browser-microphone-smoke` checks exact origins, old-denial recovery, a real live audio track, camera denial and an untrusted origin. Fixture pages are served in memory, microphone tracks are stopped immediately, and no microphone audio is sent or saved.

@@ -10,6 +10,7 @@ internal sealed record AppPreferences
     public Dictionary<string, CaptureMode> CaptureModes { get; init; } = new(StringComparer.Ordinal);
     public bool SoftwarePreview { get; init; }
     public int PictureFit { get; init; }
+    public bool MonitorCaptureAudio { get; init; } = true;
     public double Volume { get; init; } = 75;
     public double BrowserOpacity { get; init; } = 1;
     public double MenuOpacity { get; init; } = 0.96;
@@ -20,15 +21,25 @@ internal sealed record AppPreferences
     public int SpeechRate { get; init; }
     public int SpeechVolume { get; init; } = 85;
     public int SpeechRegion { get; init; }
+    public bool ShowFullscreenProgress { get; init; } = true;
+    public bool TranscriptionMicrophone { get; init; }
+    public string? TranscriptionLanguage { get; init; }
+    public List<string> BrowserTabs { get; init; } = [];
+    public int BrowserSelectedTab { get; init; }
 
     internal AppPreferences Normalize() => this with
     {
+        BrowserTabs = (BrowserTabs ?? []).Where(url => url is { Length: > 0 and <= 8192 } &&
+            (url == "about:blank" || (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && !string.IsNullOrEmpty(uri.Host))))
+            .Take(32).ToList(),
+        BrowserSelectedTab = Math.Clamp(BrowserSelectedTab, 0, 31),
         VideoDevice = ValidName(VideoDevice) ? VideoDevice : null,
         AudioDevice = ValidName(AudioDevice) ? AudioDevice : null,
         Volume = double.IsFinite(Volume) ? Math.Clamp(Volume, 0, 100) : 75,
         BrowserOpacity = double.IsFinite(BrowserOpacity) ? Math.Clamp(BrowserOpacity, 0.3, 1) : 1,
         MenuOpacity = double.IsFinite(MenuOpacity) ? Math.Clamp(MenuOpacity, 0.35, 1) : 0.96,
         SpeechVoice = ValidName(SpeechVoice) ? SpeechVoice : null,
+        TranscriptionLanguage = ValidName(TranscriptionLanguage) ? TranscriptionLanguage : null,
         SpeechRate = Math.Clamp(SpeechRate, -5, 5),
         SpeechVolume = Math.Clamp(SpeechVolume, 0, 100),
         SpeechRegion = SpeechRegion is >= 0 and <= 2 ? SpeechRegion : 0,

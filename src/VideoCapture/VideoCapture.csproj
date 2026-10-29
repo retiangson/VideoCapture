@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -12,10 +12,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.14" />
     <Resource Include="Assets\AppIcon.png" />
     <Content Include="tessdata\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="THIRD-PARTY-OCR.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Models\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Tools\Media\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="VideoCapture.Smoke" />
     <PackageReference Include="LibVLCSharp" Version="3.10.2" />
@@ -29,6 +31,7 @@
     <Error Condition="!Exists('$(TargetDir)libvlc\win-x64\plugins\access\libdshow_plugin.dll')" Text="The DirectShow capture plugin is missing. Use the complete VideoLAN.LibVLC.Windows.GPL runtime." />
   </Target>
   <Target Name="VerifyCaptureRuntimePublish" AfterTargets="Publish">
+    <Error Condition="!Exists('$(PublishDir)Models\ggml-small-q5_1.bin')" Text="Offline speech model is missing. Run tools/Setup-SpeechModel.ps1 before publishing." />
     <Error Condition="!Exists('$(PublishDir)libvlc\win-x64\plugins\access\libdshow_plugin.dll')" Text="Published application is missing its DirectShow capture plugin." />
     <Error Condition="!Exists('$(PublishDir)tessdata\eng.traineddata') Or !Exists('$(PublishDir)x64\tesseract55.dll')" Text="Published application is missing its offline OCR model or native runtime." />
     <Error Condition="!Exists('$(PublishDir)Tools\Media\ffmpeg.exe') Or !Exists('$(PublishDir)Tools\Media\ffprobe.exe')" Text="Published application is missing the offline embedded-subtitle reader." />

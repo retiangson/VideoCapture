@@ -1,0 +1,8 @@
+Offline speech model: multilingual Whisper small, GGML q5_1 quantization.
+Source: https://huggingface.co/ggerganov/whisper.cpp
+Revision: 5359861c739e955e79d9a303bcbc70fb988958b1
+File: ggml-small-q5_1.bin (190085487 bytes)
+SHA256: ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb
+Restore with tools/Setup-SpeechModel.ps1. The binary is excluded from Git.
+Model runs locally through bundled FFmpeg's whisper.cpp filter. Audio is never uploaded.
+Whisper weights and whisper.cpp use MIT licensing; see included license files.

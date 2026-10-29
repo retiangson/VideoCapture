@@ -34,6 +34,18 @@ public partial class MainWindow
             _fullscreenToolbar.PlaylistRequested += (_, _) => { SetFullscreen(false); LibraryTabs.SelectedItem = PlaylistTab; };
             _fullscreenToolbar.MenuOpacityRequested += (_, _) => MenuOpacity.Value = _fullscreenToolbar.MenuOpacity;
             _fullscreenToolbar.VolumeRequested += (_, _) => Volume.Value = _fullscreenToolbar.VolumeLevel;
+            _fullscreenToolbar.SpeechVolumeRequested += (_, _) => SpeechVolume.Value = _fullscreenToolbar.SpeechVolumeLevel;
+            _fullscreenToolbar.SeekRequested += (_, _) =>
+            {
+                if (_session is { IsLive: false } session) SeekPlaybackTo((long)(session.Player.Length * _fullscreenToolbar.SeekLevel / 1000));
+            };
+            _fullscreenToolbar.SetProgressVisible(_preferences.ShowFullscreenProgress);
+            _fullscreenToolbar.ProgressVisibilityRequested += (_, _) =>
+            {
+                _preferences = _preferences with { ShowFullscreenProgress = _fullscreenToolbar.ProgressVisible };
+                QueuePreferencesSave();
+            };
+            _fullscreenToolbar.SizeChanged += (_, _) => ConstrainFullscreenToolbar();
             _fullscreenToolbar.SpeechRequested += ToggleSubtitleSpeech;
             // The toolbar's close button/Alt+F4 leaves fullscreen rather than closing the recording application.
             _fullscreenToolbar.Closing += (_, e) =>
@@ -57,7 +69,13 @@ public partial class MainWindow
     {
         _fullscreenToolbar?.SetFillMode(PictureFit.SelectedIndex == 1);
         _fullscreenToolbar?.SetSpeechEnabled(SpeechEnabled.IsChecked == true);
-        _fullscreenToolbar?.SetLevels(MenuOpacity.Value, Volume.Value);
+        _fullscreenToolbar?.SetLevels(MenuOpacity.Value, Volume.Value, SpeechVolume.Value);
+        var media = _session is { HasMedia: true } active ? active : null;
+        long position = _requestedPositionMs ?? _resumePositionMs ?? media?.Player.Time ?? 0;
+        long duration = media?.Player.Length ?? 0;
+        _fullscreenToolbar?.SetProgress(duration > 0 ? 1000d * position / duration : 0,
+            media?.IsLive == true ? "LIVE" : $"{FormatTime(position)} / {FormatTime(duration)}",
+            !_busy && !_closing && _localRecording is null && !IsAudioCapturing && media is { IsLive: false } && duration > 0 && media.Player.IsSeekable);
         _fullscreenToolbar?.SetTransport(PauseButton.IsEnabled, _session?.Player.IsPlaying == true, StopButton.IsEnabled, PreviousButton.IsEnabled, NextButton.IsEnabled);
         if (_fullscreenToolbar is not null && _fullscreen)
         {
@@ -67,12 +85,25 @@ public partial class MainWindow
         }
         if (_browser is not null)
         {
+            _browser.SetVideoActions(!_busy && !_closing && CanCaptureFrame,
+                !_busy && !_closing && !IsAudioCapturing && (IsVideoRecording || CanCaptureFrame && (_session?.IsLive == true || !IsClipSaving && _session?.Player.IsPlaying == true && _requestedPositionMs is null && _resumePositionMs is null)),
+                IsVideoRecording, RecordingElapsed, IsClipSaving);
+            _browser.SetAudioState(!_busy && !_closing && (IsAudioCapturing || IsMicrophoneListening || CanStartSelectedAudio), IsAudioCapturing || IsMicrophoneListening, _transcribing && !IsMicrophoneListening, FormatTime(_audioCaptureClock.ElapsedMilliseconds));
             GetWindowThreadProcessId(GetForegroundWindow(), out uint processId);
             _browser.Topmost = _fullscreen && processId == (uint)Environment.ProcessId;
         }
-        _fullscreenToolbar?.Update(RecordButton.IsEnabled, _session?.IsRecording == true,
-            FormatTime(_recordingClock.ElapsedMilliseconds), !_busy && !_closing && CanCaptureFrame,
+        _fullscreenToolbar?.Update(RecordButton.IsEnabled, IsVideoRecording,
+            RecordingElapsed, !_busy && !_closing && CanCaptureFrame,
             !_busy && !_closing && _lastRecordingPath is not null && File.Exists(_lastRecordingPath), !_busy && !_closing);
+    }
+
+    private void ConstrainFullscreenToolbar()
+    {
+        if (!_fullscreen || _fullscreenToolbar is not { IsVisible: true } toolbar) return;
+        var pixels = PointToScreen(new Point(0, 0));
+        var origin = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice.Transform(pixels) ?? pixels;
+        toolbar.Left = Math.Clamp(toolbar.Left, origin.X, origin.X + Math.Max(0, ActualWidth - toolbar.ActualWidth));
+        toolbar.Top = Math.Clamp(toolbar.Top, origin.Y, origin.Y + Math.Max(0, ActualHeight - toolbar.ActualHeight - 12));
     }
 
     [DllImport("user32.dll")]

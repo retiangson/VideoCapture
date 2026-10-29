@@ -3,7 +3,7 @@
  xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
  Title="VideoCapture" Icon="Assets/AppIcon.png" Width="1240" Height="800" MinWidth="940" MinHeight="660"
  Background="#0B1019" Foreground="#E8EEF7" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen"
- PreviewKeyDown="Window_KeyDown" AllowDrop="True" Drop="Window_Drop">
+ PreviewKeyDown="Window_KeyDown" PreviewMouseWheel="Video_OpacityWheel" AllowDrop="True" Drop="Window_Drop">
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Grid x:Name="RootLayout" Margin="24">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -22,9 +22,9 @@
   </Grid>
   <Grid x:Name="PlayerLayout" Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
+   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
     <Grid>
-     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
+     <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
      <Viewbox x:Name="VideoScale" Stretch="Uniform"><Image x:Name="Video" Stretch="Fill" Width="16" Height="9" RenderOptions.BitmapScalingMode="LowQuality"/></Viewbox>
      <TextBlock x:Name="VideoPlaceholder" Text="Your screen, uninterrupted.&#10;&#10;Open videos or choose a capture device." Foreground="#8495AF" FontSize="16" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="32" MaxWidth="420"/>
     </Grid>
@@ -41,6 +41,7 @@
         <StackPanel Grid.Column="1"><TextBlock Text="Format" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="CaptureFormats" IsEnabled="False" SelectionChanged="CaptureSetting_Changed"/></StackPanel>
        </Grid>
        <TextBlock Text="Audio device" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="AudioDevices" DisplayMemberPath="Name" SelectionChanged="CaptureSetting_Changed"/>
+       <CheckBox x:Name="MonitorCaptureAudio" Content="Monitor capture audio" IsChecked="True" Checked="MonitorCaptureAudio_Changed" Unchecked="MonitorCaptureAudio_Changed" ToolTip="Play capture audio through speakers. Disable to prevent microphone echo; recording and transcription still capture source audio." Margin="0,6,0,8"/>
        <TextBlock x:Name="SourceDetails" Text="Choose a device. Preview starts automatically." Foreground="#91A0B7" FontSize="11" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,14"/>
        <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <Button x:Name="RecordButton" Click="Record_Click" Background="#9B344E" BorderBrush="#B64662"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordLabel" Text="Record live"/></StackPanel></Button>
@@ -56,7 +57,7 @@
        <Button x:Name="CopyFrameButton" Content="Copy frame" Click="CopyFrame_Click" IsEnabled="False" Margin="0,0,0,7"/>
        <Button x:Name="CopyTextButton" Content="Copy video text" Click="CopyText_Click" IsEnabled="False" Margin="0,0,0,7"/>
        <Button x:Name="ScreenTextButton" Content="Select screen text…" Click="ScreenText_Click" Margin="0,0,0,12"/>
-       <TextBlock Text="Right-click in fullscreen for controls. Preferences save automatically." Foreground="#7F90AA" FontSize="11" TextWrapping="Wrap" LineHeight="17"/>
+       <TextBlock Text="Fullscreen: left-click for controls, right-click for browser. Preferences save automatically." Foreground="#7F90AA" FontSize="11" TextWrapping="Wrap" LineHeight="17"/>
       </StackPanel></ScrollViewer>
      </TabItem>
      <TabItem x:Name="PlaylistTab" Header="Playlist">
@@ -87,7 +88,7 @@
        <TextBlock Text="Speech speed" Style="{StaticResource FieldLabel}"/>
        <DockPanel><TextBlock Text="{Binding Value, ElementName=SpeechRate, StringFormat={}{0:0}}" DockPanel.Dock="Right" Foreground="#91A0B7" Margin="8,0,0,0" VerticalAlignment="Center"/><Slider x:Name="SpeechRate" Minimum="-5" Maximum="5" SmallChange="1" Value="0" ValueChanged="SpeechSetting_Changed"/></DockPanel>
        <TextBlock Text="Speech volume" Style="{StaticResource FieldLabel}" Margin="0,10,0,0"/>
-       <Slider x:Name="SpeechVolume" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechSetting_Changed" Margin="0,0,0,12"/>
+       <Slider x:Name="SpeechSettingsVolume" Minimum="0" Maximum="100" Value="{Binding Value, ElementName=SpeechVolume, Mode=TwoWay}" Margin="0,0,0,12" ToolTip="Same reading volume as the player controls"/>
        <TextBlock Text="OCR subtitle region" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="SpeechRegion" SelectedIndex="0" SelectionChanged="SpeechVoice_Changed"><ComboBoxItem Content="Bottom 35%"/><ComboBoxItem Content="Bottom 50%"/><ComboBoxItem Content="Whole picture"/></ComboBox>
        <Border Background="#1B273A" CornerRadius="8" Padding="12" Margin="0,8,0,0"><StackPanel>
         <TextBlock x:Name="SpeechMode" Text="Subtitle reading is off." Foreground="#5CE0C1" TextWrapping="Wrap" FontSize="11"/>
@@ -110,7 +111,13 @@
       <Button x:Name="StopButton" Content="&#xE71A;" Style="{StaticResource IconButton}" Click="Stop_Click" ToolTip="Stop" AutomationProperties.Name="Stop" IsEnabled="False"/>
       <Button x:Name="NextButton" Content="&#xE893;" Style="{StaticResource IconButton}" Click="Next_Click" ToolTip="Next video" AutomationProperties.Name="Next video"/>
      </StackPanel>
-     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock Text="&#xE767;" FontFamily="Segoe MDL2 Assets" Foreground="#91A0B7" VerticalAlignment="Center" Margin="0,0,9,0"/><Slider x:Name="Volume" Width="110" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Volume"/><Button Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="14,0,0,0"/></StackPanel>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+      <StackPanel>
+       <DockPanel><TextBlock Text="Video" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=Volume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/></DockPanel>
+       <DockPanel><TextBlock Text="Reading" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=SpeechVolume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="SpeechVolume" Width="100" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/></DockPanel>
+      </StackPanel>
+      <Button Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="12,0,0,0"/>
+     </StackPanel>
     </Grid>
     <TextBlock x:Name="Status" Text="Ready — select a capture device or open a movie." Foreground="#7F90AA" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,9,0,0"/>
    </StackPanel>

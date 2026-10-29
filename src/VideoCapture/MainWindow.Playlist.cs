@@ -19,9 +19,9 @@ public partial class MainWindow
     }
     internal async Task AddPlaylistFilesAsync(IEnumerable<string> paths, bool playFirst)
     {
-        if (_busy || _closing || _session?.IsRecording == true) return;
+        if (_busy || _closing || IsSourceLocked) return;
         var files = await Task.Run(() => paths.Select(Path.GetFullPath).Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-        if (_closing || _busy || _session?.IsRecording == true) return;
+        if (_closing || _busy || IsSourceLocked) return;
         PlaylistEntry? first = null;
         foreach (string path in files) { var item = _playlist.Add(path); first ??= item; }
         LibraryTabs.SelectedItem = PlaylistTab;
@@ -56,19 +56,19 @@ public partial class MainWindow
     private void Playlist_SelectionChanged(object sender, SelectionChangedEventArgs e)
     { if (PauseButton is not null) UpdateControls(); else UpdatePlaylistControls(); QueuePreferencesSave(); }
     private async void Next_Click(object sender, RoutedEventArgs e)
-    { if (_playlist.Next is { } next && _session?.IsRecording != true) await OpenFileAsync(next.Path); }
+    { if (_playlist.Next is { } next && !IsSourceLocked) await OpenFileAsync(next.Path); }
     private async void Previous_Click(object sender, RoutedEventArgs e)
-    { if (_playlist.Previous is { } previous && _session?.IsRecording != true) await OpenFileAsync(previous.Path); }
+    { if (_playlist.Previous is { } previous && !IsSourceLocked) await OpenFileAsync(previous.Path); }
     private async void RemovePlaylist_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
-        if (_session?.IsRecording == true) return;
+        if (IsSourceLocked) return;
         if (PlaylistList.SelectedItem is not PlaylistEntry selected) return;
         if (_playlist.Current == selected && _session is { IsLive: false, HasMedia: true }) await StopAsync();
         _playlist.Remove(selected);
     });
     private async void ClearPlaylist_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
-        if (_session?.IsRecording == true) return;
+        if (IsSourceLocked) return;
         if (_session is { IsLive: false, HasMedia: true }) await StopAsync();
         _playlist.Clear();
     });
@@ -76,14 +76,14 @@ public partial class MainWindow
     private void PlaylistDown_Click(object sender, RoutedEventArgs e) => MovePlaylist(1);
     private void MovePlaylist(int direction)
     {
-        if (_busy || _closing || _session?.IsRecording == true || PlaylistList.SelectedItem is not PlaylistEntry selected) return;
+        if (_busy || _closing || IsSourceLocked || PlaylistList.SelectedItem is not PlaylistEntry selected) return;
         _playlist.Move(selected, direction);
         PlaylistList.SelectedItem = selected;
     }
     private void UpdatePlaylistControls()
     {
         if (PlaylistList is null) return;
-        bool ready = _preferencesLoaded && !_busy && !_closing && _session?.IsRecording != true;
+        bool ready = _preferencesLoaded && !_busy && !_closing && !IsSourceLocked;
         PlaylistList.IsEnabled = ready;
         int selected = PlaylistList.SelectedIndex;
         PlaylistCount.Text = $"{_playlist.Items.Count} video{(_playlist.Items.Count == 1 ? "" : "s")}";
@@ -98,7 +98,7 @@ public partial class MainWindow
     }
     private void MenuOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_fullscreenToolbar is not null) _fullscreenToolbar.SetLevels(e.NewValue, Volume.Value);
+        if (_fullscreenToolbar is not null) _fullscreenToolbar.SetLevels(e.NewValue, Volume.Value, SpeechVolume.Value);
         QueuePreferencesSave();
     }
     private Task AdvancePlaylistAfterEndAsync() => RunAsync(async () =>

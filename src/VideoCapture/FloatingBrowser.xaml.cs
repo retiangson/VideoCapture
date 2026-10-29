@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using VideoCapture.Services;
 
 namespace VideoCapture;
 
@@ -12,7 +13,89 @@ public partial class FloatingBrowser : Window
 {
     internal const string HomeAddress = "https://chatgpt.com/";
     public event EventHandler? ScreenTextRequested;
+    public event EventHandler? CopyVideoFrameRequested, CopyVideoTextRequested, RecordVideoRequested;
+    public event EventHandler? AudioTextRequested, CancelAudioRequested, CopyTranscriptRequested, TranscriptLanguageRequested;
+    private bool _updatingTranscriptLanguage;
+    internal bool MicrophoneSelected => TranscriptSource.SelectedIndex == 1;
+    internal void SetMicrophoneSource(bool microphone) => TranscriptSource.SelectedIndex = microphone ? 1 : 0;
+    internal event EventHandler? TranscriptSourceRequested;
+    internal string Transcript => TranscriptText.Text;
+    internal string? TranscriptLanguageId => (TranscriptLanguage.SelectedItem as TranscriptionLanguage)?.Id;
+    internal void SetTranscriptLanguages(IReadOnlyList<TranscriptionLanguage> languages, string? selected)
+    {
+        _updatingTranscriptLanguage = true;
+        try
+        {
+            TranscriptLanguage.ItemsSource = languages;
+            TranscriptLanguage.SelectedItem = languages.FirstOrDefault(l => l.Id == selected) ?? languages.FirstOrDefault();
+        }
+        finally { _updatingTranscriptLanguage = false; }
+    }
+    internal void SetAudioState(bool canStart, bool capturing, bool processing, string elapsed)
+    {
+        StartAudioButton.IsEnabled = canStart;
+        StartAudioButton.Content = capturing ? "Stop & transcribe · " + elapsed : processing ? "Transcribing…" : "Start capture";
+        AudioTextLabel.Text = capturing ? "Audio to text · capturing" : processing ? "Audio to text · processing" : "Audio to text";
+        StartAudioButton.ToolTip = capturing ? "Stop and transcribe the captured audio" : MicrophoneSelected
+            ? "Listen to the default Windows microphone using offline dictation" : "Capture the playing video's audio only";
+        TranscriptSource.IsEnabled = !capturing && !processing;
+        TranscriptLanguage.IsEnabled = !capturing && !processing && TranscriptLanguage.Items.Count > 0;
+        CancelAudioButton.IsEnabled = capturing || processing;
+        TranscriptText.IsReadOnly = capturing || processing;
+    }
+    internal void SetMicrophoneFeedback(MicrophoneFeedback feedback)
+    {
+        MicrophoneFeedbackPanel.Visibility = Visibility.Visible;
+        MicrophoneLevel.Value = feedback.Level;
+        MicrophonePreview.Text = feedback.Text;
+        SetTranscriptStatus(feedback.Status);
+    }
+    private void MicrophoneSettings_Click(object sender, RoutedEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:sound") { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { SetTranscriptStatus("Could not open Windows input settings: " + ex.Message); }
+    }
+    internal void ResetMicrophoneFeedback()
+    {
+        MicrophoneLevel.Value = 0;
+        MicrophonePreview.Text = "Speak, then choose Stop & transcribe for the final Whisper result.";
+        MicrophoneFeedbackPanel.Visibility = MicrophoneSelected ? Visibility.Visible : Visibility.Collapsed;
+    }
+    internal void SetTranscript(string text) => TranscriptText.Text = text;
+    internal void SetTranscriptStatus(string text) { TranscriptStatus.Text = text; TranscriptPanel.ToolTip = text; }
+    private void AudioText_Click(object sender, RoutedEventArgs e)
+    {
+        bool show = TranscriptPanel.Visibility != Visibility.Visible;
+        TranscriptPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptPanel.IsExpanded = show;
+        if (!show && !IsBrowserFullscreen) MinHeight = 400;
+    }
+    private void AudioStart_Click(object sender, RoutedEventArgs e) => AudioTextRequested?.Invoke(this, EventArgs.Empty);
+    private void TranscriptSource_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (MicrophoneLevel is not null) ResetMicrophoneFeedback();
+        TranscriptSourceRequested?.Invoke(this, EventArgs.Empty);
+    }
+    private void CancelAudio_Click(object sender, RoutedEventArgs e) => CancelAudioRequested?.Invoke(this, EventArgs.Empty);
+    private void CopyTranscript_Click(object sender, RoutedEventArgs e) => CopyTranscriptRequested?.Invoke(this, EventArgs.Empty);
+    private void TranscriptLanguage_Changed(object sender, SelectionChangedEventArgs e) { if (!_updatingTranscriptLanguage) TranscriptLanguageRequested?.Invoke(this, EventArgs.Empty); }
+    private void TranscriptText_Changed(object sender, TextChangedEventArgs e) { if (CopyTranscriptButton is not null) CopyTranscriptButton.IsEnabled = !string.IsNullOrWhiteSpace(TranscriptText.Text); }
+    private void TranscriptPanel_Expanded(object sender, RoutedEventArgs e) { if (!IsBrowserFullscreen) MinHeight = 660; }
+    private void TranscriptPanel_Collapsed(object sender, RoutedEventArgs e) { if (!IsBrowserFullscreen) MinHeight = 400; }
     public event EventHandler? OpacityPreferenceChanged;
+    internal event EventHandler? SessionChanged;
+    private List<string> _restoreTabs = [];
+    private int _restoreSelected;
+    internal bool SessionReady { get; private set; }
+    internal List<string> SessionTabs => _tabs.Select(t => t.SavedAddress).ToList();
+    internal int SelectedTabIndex => Tabs.SelectedIndex;
+    internal void RestoreTabs(IEnumerable<string> addresses, int selected)
+    {
+        if (_started) throw new InvalidOperationException("Restore tabs before showing the browser.");
+        _restoreTabs = addresses.Where(url => url == "about:blank" || TryAddress(url, out _)).Take(32).ToList();
+        _restoreSelected = selected;
+    }
+    private void NotifySessionChanged() { if (SessionReady && !_disposed) SessionChanged?.Invoke(this, EventArgs.Empty); }
     private readonly List<BrowserTab> _tabs = [];
     private readonly string _initialAddress, _profileDirectory;
     private CoreWebView2Environment? _environment;
@@ -21,6 +104,18 @@ public partial class FloatingBrowser : Window
     private BrowserTab? ActiveTab => (Tabs.SelectedItem as TabItem)?.Tag as BrowserTab;
     internal WebView2CompositionControl? ActiveBrowser => ActiveTab?.View;
     internal int TabCount => _tabs.Count;
+    internal void SetVideoActions(bool canCapture, bool canRecord, bool recording, string elapsed, bool savingClip = false)
+    {
+        CopyVideoFrameButton.IsEnabled = CopyVideoTextButton.IsEnabled = canCapture;
+        RecordVideoButton.IsEnabled = canRecord;
+        RecordVideoLabel.Text = recording ? "Stop recording" : savingClip ? "Saving clip…" : "Record video";
+        RecordVideoButton.ToolTip = recording ? "Stop and save the video recording" : "Record the playing video and its source audio; browser is excluded";
+        VideoRecordingTime.Text = recording ? elapsed : "";
+    }
+    internal void SetVideoFeedback(string message) => VideoFeedback.Text = message;
+    private void CopyVideoFrame_Click(object sender, RoutedEventArgs e) => CopyVideoFrameRequested?.Invoke(this, EventArgs.Empty);
+    private void CopyVideoText_Click(object sender, RoutedEventArgs e) => CopyVideoTextRequested?.Invoke(this, EventArgs.Empty);
+    private void RecordVideo_Click(object sender, RoutedEventArgs e) => RecordVideoRequested?.Invoke(this, EventArgs.Empty);
 
     public FloatingBrowser(double opacity = 1) : this(opacity, HomeAddress, Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VideoCapture", "BrowserProfile")) { }
@@ -30,6 +125,7 @@ public partial class FloatingBrowser : Window
         _initialAddress = initialAddress;
         _profileDirectory = profileDirectory;
         InitializeComponent();
+        StateChanged += (_, _) => UpdateWindowButtons();
         Transparency.Value = Math.Clamp(opacity, 0.3, 1);
         Loaded += (_, _) => { if (!_started) { _started = true; Initialization = InitializeAsync(); } };
         Closing += (_, e) => { if (!_disposed) { e.Cancel = true; Hide(); } };
@@ -41,8 +137,15 @@ public partial class FloatingBrowser : Window
         {
             _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _profileDirectory);
             if (_disposed) return;
-            await AddTabAsync(_initialAddress);
-            if (!_disposed) NewTabButton.IsEnabled = true;
+            foreach (string address in _restoreTabs.Count > 0 ? _restoreTabs : [_initialAddress])
+            {
+                await AddTabAsync(address);
+                if (_disposed) return;
+            }
+            Tabs.SelectedIndex = Math.Clamp(_restoreSelected, 0, _tabs.Count - 1);
+            SessionReady = true;
+            NewTabButton.IsEnabled = true;
+            NotifySessionChanged();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (!_disposed) Feedback.Text = "Browser unavailable. Check Microsoft Edge WebView2 Runtime. " + ex.Message; }
@@ -56,10 +159,10 @@ public partial class FloatingBrowser : Window
             if (!TryAddress(address, out var uri)) throw new ArgumentException("Enter a valid HTTP or HTTPS address.", nameof(address));
             address = uri!.AbsoluteUri;
         }
-        var tab = new BrowserTab();
+        var tab = new BrowserTab { SavedAddress = address ?? "about:blank" };
         var header = new StackPanel { Orientation = Orientation.Horizontal };
         header.Children.Add(tab.Title);
-        var close = new Button { Content = "×", Padding = new Thickness(5, 0, 5, 0), Margin = new Thickness(8, 0, 0, 0), ToolTip = "Close tab (Ctrl+W)", Focusable = false };
+        var close = new Button { Content = "×", Padding = new Thickness(0), Margin = new Thickness(5, 0, 0, 0), Width = 18, Height = 18, MinHeight = 18, FontSize = 11, ToolTip = "Close tab (Ctrl+W)", Focusable = false };
         close.Click += async (_, e) => { e.Handled = true; await RunBrowserActionAsync(() => CloseTabAsync(tab.View)); };
         header.Children.Add(close);
         tab.Item.Header = header;
@@ -73,6 +176,8 @@ public partial class FloatingBrowser : Window
             await tab.View.EnsureCoreWebView2Async(_environment);
             if (_disposed || !_tabs.Contains(tab)) return null;
             ConfigureTab(tab);
+            await BrowserPermissions.ResetOldMicrophoneDecisionsAsync(tab.View.CoreWebView2.Profile);
+            if (_disposed || !_tabs.Contains(tab)) return null;
             if (address is not null) tab.View.CoreWebView2.Navigate(address);
             UpdateNavigation();
             return tab.View;
@@ -121,9 +226,25 @@ public partial class FloatingBrowser : Window
         };
         core.DocumentTitleChanged += (_, _) => UpdateTitle(tab);
         core.WindowCloseRequested += async (_, _) => await RunBrowserActionAsync(() => CloseTabAsync(tab.View));
-        core.SourceChanged += (_, _) => { if (tab == ActiveTab) UpdateNavigation(); };
+        core.SourceChanged += (_, _) =>
+        {
+            string source = core.Source;
+            tab.SavedAddress = source == "about:blank" ? source : TryAddress(source, out var uri) ? uri!.AbsoluteUri : HomeAddress;
+            NotifySessionChanged();
+            if (tab == ActiveTab) UpdateNavigation();
+        };
         core.HistoryChanged += (_, _) => { if (tab == ActiveTab) UpdateNavigation(); };
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        core.PermissionRequested += (_, e) =>
+        {
+            // Do not persist a blanket allow: embedding ChatGPT in an unrelated page
+            // must not bypass the top-level-origin check on a later request.
+            e.SavesInProfile = false;
+            bool allow = !_disposed && _tabs.Contains(tab) && BrowserPermissions.AllowsMicrophone(e.PermissionKind, e.Uri, core.Source);
+            e.State = allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            if (e.PermissionKind == CoreWebView2PermissionKind.Microphone)
+                SetFeedback(tab, allow ? "ChatGPT microphone access allowed. Use the website's microphone controls to start or stop."
+                    : "Microphone access is available only to a ChatGPT page opened directly in this browser.");
+        };
         core.DownloadStarting += (_, e) => { e.Cancel = true; SetFeedback(tab, "Downloads are not supported in the floating browser."); };
         core.ProcessFailed += (_, e) => SetFeedback(tab, "Browser process failed: " + e.ProcessFailedKind + ". Reload or close this tab.");
     }
@@ -145,6 +266,7 @@ public partial class FloatingBrowser : Window
         ForwardButton.IsEnabled = core?.CanGoForward == true;
         Address.Text = core is null || core.Source.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ? "" : core.Source;
         Feedback.Text = ActiveTab?.Feedback ?? "Starting browser…";
+        NotifySessionChanged();
     }
     private void Tab_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -199,14 +321,29 @@ public partial class FloatingBrowser : Window
     private void Forward_Click(object sender, RoutedEventArgs e) { if (ActiveBrowser?.CoreWebView2?.CanGoForward == true) ActiveBrowser.CoreWebView2.GoForward(); }
     private void Reload_Click(object sender, RoutedEventArgs e) => ActiveBrowser?.CoreWebView2?.Reload();
     private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
+    internal void AdjustOpacity(int wheelDelta) => Transparency.Value = Math.Clamp(
+        Transparency.Value + wheelDelta / 120d * .05, Transparency.Minimum, Transparency.Maximum);
+    private void Browser_OpacityWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.OriginalSource is System.Windows.Media.Visual source && (source == BrowserHost || BrowserHost.IsAncestorOf(source))) return;
+        AdjustOpacity(e.Delta);
+        e.Handled = true;
+    }
     private void Opacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         Opacity = Math.Clamp(e.NewValue, 0.3, 1);
         OpacityPreferenceChanged?.Invoke(this, EventArgs.Empty);
     }
-    private void Drag_MouseDown(object sender, MouseButtonEventArgs e) { if (e.OriginalSource is TextBlock && e.LeftButton == MouseButtonState.Pressed) DragMove(); }
+    private void Drag_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not TextBlock || e.LeftButton != MouseButtonState.Pressed) return;
+        if (e.ClickCount == 2) { SetBrowserFullscreen(!IsBrowserFullscreen); e.Handled = true; }
+        else if (!IsBrowserFullscreen && WindowState == WindowState.Normal) DragMove();
+    }
     private async void Browser_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F11) { SetBrowserFullscreen(!IsBrowserFullscreen); e.Handled = true; return; }
+        if (e.Key == Key.Escape && IsBrowserFullscreen) { SetBrowserFullscreen(false); e.Handled = true; return; }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             if (e.Key == Key.B) { Hide(); e.Handled = true; return; }
@@ -215,7 +352,7 @@ public partial class FloatingBrowser : Window
         if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
         if (e.Key == Key.T) { e.Handled = true; await RunBrowserActionAsync(async () => { await AddTabAsync(); }); }
         else if (e.Key == Key.W && ActiveBrowser is { } view) { e.Handled = true; await RunBrowserActionAsync(() => CloseTabAsync(view)); }
-        else if (e.Key == Key.L) { Address.Focus(); Address.SelectAll(); e.Handled = true; }
+        else if (e.Key == Key.L) { NavigationPanel.IsExpanded = true; Address.Focus(); Address.SelectAll(); e.Handled = true; }
         else if (e.Key == Key.Tab && Tabs.Items.Count > 0)
         {
             int direction = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
@@ -226,6 +363,7 @@ public partial class FloatingBrowser : Window
     internal void Shutdown()
     {
         _disposed = true;
+        SessionReady = false;
         foreach (var tab in _tabs.ToArray()) RemoveTab(tab);
         Close();
     }
@@ -233,8 +371,9 @@ public partial class FloatingBrowser : Window
     {
         public TabItem Item { get; } = new();
         public WebView2CompositionControl View { get; } = new();
-        public TextBlock Title { get; } = new() { Text = "New tab", MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        public TextBlock Title { get; } = new() { Text = "New tab", MaxWidth = 112, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         public string Feedback { get; set; } = "Starting tab…";
         public string? LocalPageUri { get; set; }
+        public string SavedAddress { get; set; } = "about:blank";
     }
 }

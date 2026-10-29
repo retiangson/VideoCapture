@@ -12,6 +12,7 @@ public sealed class PlaybackSession : IDisposable
     public VideoFrameBuffer Frames { get; }
     public bool IsLive { get; private set; }
     public string? RecordingPath { get; private set; }
+    public string? AudioCapturePath { get; private set; }
     public bool IsRecording => RecordingPath is not null;
     public bool HasMedia => _media is not null;
     public bool UsesSoftwarePreview { get; }
@@ -36,16 +37,16 @@ public sealed class PlaybackSession : IDisposable
         if (softwarePreview) Frames.Attach(Player);
     }
 
-    public void OpenFile(string path, string? recordingPath = null)
+    public void OpenFile(string path, string? recordingPath = null, string? audioCapturePath = null)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("The movie file no longer exists.", path);
         Stop();
         var media = new Media(_engine, new Uri(Path.GetFullPath(path)));
-        ConfigureRecording(media, recordingPath);
+        ConfigureRecording(media, recordingPath, audioCapturePath);
         Play(media);
     }
 
-    public void OpenCapture(string video, string? audio, string? recordingPath = null, CaptureMode? mode = null)
+    public void OpenCapture(string video, string? audio, string? recordingPath = null, CaptureMode? mode = null, string? audioCapturePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(video);
         string capturePlugin = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64", "plugins", "access", "libdshow_plugin.dll");
@@ -64,24 +65,35 @@ public sealed class PlaybackSession : IDisposable
             media.AddOption($":dshow-aspect-ratio={mode.Width}:{mode.Height}");
         }
         media.AddOption(":live-caching=80");
-        ConfigureRecording(media, recordingPath);
+        ConfigureRecording(media, recordingPath, audioCapturePath);
         IsLive = true;
         Play(media);
     }
 
-    private void ConfigureRecording(Media media, string? recordingPath)
+    private void ConfigureRecording(Media media, string? recordingPath, string? audioCapturePath)
     {
+        var branches = new List<string> { "dst=display" };
+        string QuoteBranch(string branch) => "\"" + branch.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
         if (recordingPath is not null)
         {
             // Display the original input; encode only the file branch to avoid an encode/decode round trip in preview.
             string output = RecordingStore.QuoteOutputPath(recordingPath);
             string fileBranch = "transcode{vcodec=h264,venc=x264{profile=high,preset=ultrafast,tune=zerolatency},vb=8000,acodec=mp4a,ab=192}:std{access=file,mux=mkv,dst=" + output + "}";
             // The duplicate option parses the chain once; std parses the embedded path a second time.
-            string quotedBranch = "\"" + fileBranch.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
-            media.AddOption(":sout=#duplicate{dst=display,dst=" + quotedBranch + "}");
+            branches.Add("dst=" + QuoteBranch(fileBranch));
+        }
+        if (audioCapturePath is not null)
+        {
+            string output = RecordingStore.QuoteOutputPath(audioCapturePath);
+            branches.Add("dst=" + QuoteBranch("transcode{acodec=s16l,channels=1,samplerate=16000}:std{access=file,mux=wav,dst=" + output + "}") + ",select=audio");
+        }
+        if (branches.Count > 1)
+        {
+            media.AddOption(":sout=#duplicate{" + string.Join(",", branches) + "}");
             media.AddOption(":no-sout-all");
         }
         RecordingPath = recordingPath;
+        AudioCapturePath = audioCapturePath;
     }
 
     public VideoSourceInfo? GetVideoInfo()
@@ -121,6 +133,7 @@ public sealed class PlaybackSession : IDisposable
         _media?.Dispose();
         _media = null;
         RecordingPath = null;
+        AudioCapturePath = null;
         IsLive = false;
     }
 

@@ -55,5 +55,6 @@ public partial class MainWindow
     {
         Status.Text = message;
         _fullscreenToolbar?.SetFeedback(message);
+        _browser?.SetVideoFeedback(message);
     }
 }

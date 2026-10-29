@@ -24,6 +24,34 @@ internal static class Program
                 return 0;
             }
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            if (args is ["--test-browser-microphone", var microphoneOutput])
+            {
+                var checks = BrowserMicrophoneTests.RunAsync(Path.GetFullPath(microphoneOutput));
+                PumpUntil(() => checks.IsCompleted, "browser microphone permission checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
+            if (args is ["--test-transcription", var transcriptionOutput])
+            {
+                var checks = TranscriptionTests.RunAsync(Path.GetFullPath(transcriptionOutput));
+                PumpUntil(() => checks.IsCompleted, "offline transcription checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
+            if (args is ["--test-browser-panel", var panelInput, var panelOutput])
+            {
+                var checks = BrowserPanelTests.RunAsync(Path.GetFullPath(panelInput), Path.GetFullPath(panelOutput));
+                PumpUntil(() => checks.IsCompleted, "browser capture panel checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
+            if (args is ["--test-resume", var resumeInput, var resumeOutput])
+            {
+                var checks = PlaybackResumeTests.RunAsync(Path.GetFullPath(resumeInput), Path.GetFullPath(resumeOutput));
+                PumpUntil(() => checks.IsCompleted, "fullscreen controls and playback history checks", 55);
+                checks.GetAwaiter().GetResult();
+                return 0;
+            }
             if (args is ["--test-speech", var speechOutput])
             {
                 var checks = SubtitleSpeechTests.RunAsync(Path.GetFullPath(speechOutput));
@@ -48,7 +76,7 @@ internal static class Program
             if (args is ["--profile-startup"])
             {
                 var startupWatch = Stopwatch.StartNew();
-                var startupWindow = new MainWindow(new MemoryPreferencesStore());
+                var startupWindow = new MainWindow(new MemoryPreferencesStore(), new MemoryPlaybackHistoryStore());
                 double constructedMs = startupWatch.Elapsed.TotalMilliseconds;
                 double paintedMs = -1;
                 startupWindow.ContentRendered += (_, _) => paintedMs = startupWatch.Elapsed.TotalMilliseconds;
@@ -112,7 +140,7 @@ internal static class Program
                 throw new Exception("16:9 must fill a 4:3 screen with a centered horizontal crop.");
             if (args is ["--check-fullscreen", var aspectFile, var aspectSnapshot])
             {
-                var aspectWindow = new MainWindow(new MemoryPreferencesStore());
+                var aspectWindow = new MainWindow(new MemoryPreferencesStore(), new MemoryPlaybackHistoryStore());
                 aspectWindow.Show();
                 aspectWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var openAspect = aspectWindow.OpenFileAsync(Path.GetFullPath(aspectFile));
@@ -151,7 +179,7 @@ internal static class Program
             }
             if (args is ["--probe-ui", var uiDevice, var uiWidth, var uiHeight, var uiFps])
             {
-                var previewWindow = new MainWindow(new MemoryPreferencesStore());
+                var previewWindow = new MainWindow(new MemoryPreferencesStore(), new MemoryPlaybackHistoryStore());
                 previewWindow.Show();
                 previewWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var devices = (ComboBox)previewWindow.FindName("VideoDevices");
@@ -192,7 +220,7 @@ internal static class Program
             }
             if (args is ["--probe-recovery", var recoveryDevice, var recoveryMovie])
             {
-                var recoveryWindow = new MainWindow(new MemoryPreferencesStore());
+                var recoveryWindow = new MainWindow(new MemoryPreferencesStore(), new MemoryPlaybackHistoryStore());
                 recoveryWindow.Show();
                 var recoveryDevices = (ComboBox)recoveryWindow.FindName("VideoDevices");
                 PumpUntil(() => recoveryDevices.Items.Cast<CaptureDevice>().Any(d => d.Name == recoveryDevice), "initial device discovery");
@@ -254,7 +282,7 @@ internal static class Program
                     var seededPreferences = devicePreferenceStore.SaveAsync(seedSettings);
                     PumpUntil(() => seededPreferences.IsCompleted, "seed device preferences");
                     seededPreferences.GetAwaiter().GetResult();
-                    var restoredWindow = new MainWindow(devicePreferenceStore);
+                    var restoredWindow = new MainWindow(devicePreferenceStore, new MemoryPlaybackHistoryStore());
                     restoredWindow.Show();
                     PumpUntil(() => restoredWindow.SourceVideoInfo is { Width: 1920, Height: 1080, FramesPerSecond: > 29 and < 31 } && restoredWindow.PresentedFrameCount >= 10, "saved device automatic 1080p30 preview");
                     var restoredView = (LibVLCSharp.WPF.VideoView)restoredWindow.FindName("GpuVideo");
@@ -267,7 +295,7 @@ internal static class Program
                     var savedRateSelector = (ComboBox)restoredWindow.FindName("CaptureFrameRates");
                     savedRateSelector.SelectedItem = savedRateSelector.Items.Cast<CaptureFrameRate>().First(rate => Math.Abs(rate.FramesPerSecond - 60) < 0.01);
                     CloseWindow(restoredWindow);
-                    var reopenedWindow = new MainWindow(devicePreferenceStore);
+                    var reopenedWindow = new MainWindow(devicePreferenceStore, new MemoryPlaybackHistoryStore());
                     reopenedWindow.Show();
                     PumpUntil(() => reopenedWindow.SourceVideoInfo is { Width: 1920, Height: 1080, FramesPerSecond: > 59 and < 61 } && reopenedWindow.PresentedFrameCount >= 10, "changed 60 fps restored after closing and reopening");
                     CloseWindow(reopenedWindow);
@@ -347,7 +375,7 @@ internal static class Program
                 Console.WriteLine($"Native H.264/AAC recording finalized: {exclusive.Length} bytes. Output handle released.");
             }
 
-            var window = new MainWindow(new MemoryPreferencesStore());
+            var window = new MainWindow(new MemoryPreferencesStore(), new MemoryPlaybackHistoryStore());
             window.Show();
             window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             var renderer = (ComboBox)window.FindName("PreviewRenderer");
@@ -378,7 +406,7 @@ internal static class Program
                 if (((UIElement)window.FindName(name)).Visibility != Visibility.Collapsed)
                     throw new Exception("Fullscreen did not hide " + name);
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Fullscreen toolbar must start hidden.");
-            ((UIElement)window.FindName("VideoBorder")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
+            window.ToggleFullscreenToolbar();
             PumpUntil(() => window.FloatingToolbar?.IsVisible == true, "floating fullscreen toolbar");
             if (((Button)window.FloatingToolbar!.FindName("CopyFrameButton")).IsEnabled != true)
                 throw new Exception("Floating toolbar must permit frame capture while video is playing.");
@@ -467,10 +495,10 @@ internal static class Program
             if (((FrameworkElement)window.FindName("DevicePanel")).Visibility != Visibility.Collapsed)
                 throw new Exception("GPU fullscreen must hide the device panel.");
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("GPU fullscreen controls must start hidden.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Right-clicking the GPU overlay must show controls.");
-            ((UIElement)window.FindName("VideoInputOverlay")).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonUpEvent });
-            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Right-clicking GPU video again must hide controls.");
+            window.ToggleFullscreenToolbar();
+            if (window.FloatingToolbar?.IsVisible != true) throw new Exception("Showing GPU overlay controls failed.");
+            window.ToggleFullscreenToolbar();
+            if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Hiding GPU overlay controls failed.");
             SendKey(window, Key.Escape);
             CloseWindow(window);
             Console.WriteLine("WPF layout rendered. All smoke checks passed.");
