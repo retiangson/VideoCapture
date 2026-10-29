@@ -1,11 +1,11 @@
 # Android parity and validation
 
-This is a foreground-only preview, not a claim that every Windows feature is complete. Current automated coverage runs on an API 35 x86_64 tablet emulator with networking disabled; an emulator cannot validate USB/OTG hardware or sustained device performance.
+This is a foreground-only preview, not a claim that every Windows feature is complete. Current automated coverage runs on an API 35 x86_64 emulator at phone portrait, phone landscape and tablet sizes with networking disabled; an emulator cannot validate USB/OTG hardware or sustained device performance.
 
 | Area | Implemented | Verification / limitation |
 | --- | --- | --- |
 | Local media | Media3 hardware playback, seek, fit/crop, independent volumes, queue, resume | Actual decoded frames and saved resume tested offline. Android-supported codecs only; arbitrary MKV codecs are not guaranteed. |
-| Gestures / fullscreen | Immersive video, long press show, tap hide, two-finger browser toggle, draggable controls | Injected native touchscreen sequences tested. Tablet ergonomics still need review. |
+| Gestures / fullscreen | Immersive video, long press show, tap hide, two-finger browser toggle, draggable controls | Injected native touchscreen sequences tested. Phone/tablet window bounds, keyboard insets, maximize/restore and live rotation have automated coverage. Physical-device ergonomics still need review. |
 | USB video | Device selection/auto-preview, saved device/mode/FPS, surface rendering, hotplug callbacks | Compiles against pinned UVC library. **Physical Tab S8+ connection/reconnection/modes not verified.** |
 | Source audio | Explicit USB input, routing rechecked per PCM buffer, monitor/volume, local audio-track selection | No-input microphone fallback rejection and selected file-track decoding tested. USB route, sync and quality need tablet validation. USB audio is 16 kHz mono in this preview. |
 | Record / frames | Source-only hardware AVC/AAC capture, local segment export, source frame save/copy | Synthetic EGL + PCM recording and local video/audio export tested. USB capture/long recordings and selected-track export need hardware tests. Image clipboard support varies by Android target app. |
@@ -24,5 +24,5 @@ This is a foreground-only preview, not a claim that every Windows feature is com
 - Complete missing-file recovery, saved-export retry UI, and selected-audio-track guarantees during local export.
 - Port desktop-specific region OCR and decide whether Android system-wide overlay permission is actually needed. The browser currently floats only inside VideoCapture. CEC control is not implemented.
 - Validate Android WebView service/login restrictions and actual browser microphone input on the tablet.
-- Complete localization, screen-reader labels/touch-target review, phone/small-window layouts, release signing, dependency/license distribution review, and production device coverage. MainActivity still owns several UI workflows; split feature controllers before extending it substantially.
+- Complete localization, screen-reader labels/touch-target review, physical phone/small-window validation, release signing, dependency/license distribution review, and production device coverage. MainActivity still owns several UI workflows; split feature controllers before extending it substantially.
 - All packaged ARM64 native libraries have 16 KB ELF segment alignment. Runtime validation on 16 KB page-size devices remains required before general distribution; this preview targets the existing Tab S8+ hardware.

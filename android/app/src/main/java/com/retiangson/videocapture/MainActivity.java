@@ -189,6 +189,23 @@ public final class MainActivity extends ComponentActivity {
           }
         };
     root.setBackgroundColor(0xff0b1019);
+    root.addOnLayoutChangeListener(
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+          if (browser != null) browser.layoutWithinParent();
+          fitCapture();
+          if (menu != null)
+            menu.setTranslationY(
+                Math.min(
+                    0,
+                    Math.max(
+                        -Math.max(
+                            0,
+                            root.getHeight()
+                                - root.getPaddingTop()
+                                - root.getPaddingBottom()
+                                - menu.getHeight()),
+                        menu.getTranslationY())));
+        });
     setContentView(root);
     ViewCompat.setOnApplyWindowInsetsListener(
         root,
@@ -197,6 +214,10 @@ public final class MainActivity extends ComponentActivity {
               insets.getInsets(
                   WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
           root.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+          root.post(
+              () -> {
+                if (browser != null) browser.layoutWithinParent();
+              });
           return insets;
         });
     videoLayer = new FrameLayout(this);
@@ -264,7 +285,9 @@ public final class MainActivity extends ComponentActivity {
     status.setPadding(dp(18), dp(12), dp(18), dp(10));
     FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
     root.addView(status, sp);
-    menu = Ui.column(this);
+    PlayerControls controls = new PlayerControls(this);
+    menu = controls;
+    LinearLayout menuBody = controls.content;
     menu.setPadding(dp(14), dp(10), dp(14), dp(10));
     menu.setBackground(Ui.panel(0xf5131b29, dp(14)));
     menu.setAlpha(Math.max(.35f, store.level("menuOpacity", .96f)));
@@ -273,10 +296,10 @@ public final class MainActivity extends ComponentActivity {
     root.addView(menu, mp);
     LinearLayout top = Ui.row(this);
     TextView grip = Ui.text(this, "⋮⋮  VideoCapture", 14, 0xffe8eef7);
-    top.addView(grip, new LinearLayout.LayoutParams(0, dp(34), 1));
+    top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
     top.addView(Ui.button(this, "Fullscreen", () -> setFullscreen(!fullscreen)));
     top.addView(Ui.button(this, "Hide", () -> menu.setVisibility(View.GONE)));
-    menu.addView(top);
+    menu.addView(top, 0);
     grip.setOnTouchListener(
         new View.OnTouchListener() {
           float sy, start;
@@ -303,10 +326,10 @@ public final class MainActivity extends ComponentActivity {
     LinearLayout progress = Ui.row(this);
     seek = new SeekBar(this);
     seek.setMax(1000);
-    progress.addView(seek, new LinearLayout.LayoutParams(0, dp(34), 1));
+    progress.addView(seek, new LinearLayout.LayoutParams(0, dp(48), 1));
     position = Ui.text(this, "00:00 / 00:00", 11, 0xff91a0b7);
     progress.addView(position);
-    menu.addView(progress);
+    menuBody.addView(progress);
     seek.setOnSeekBarChangeListener(
         new SeekBar.OnSeekBarChangeListener() {
           public void onStartTrackingTouch(SeekBar bar) {
@@ -325,17 +348,21 @@ public final class MainActivity extends ComponentActivity {
     actions.addView(Ui.button(this, "Open", this::pickFiles));
     actions.addView(Ui.button(this, "Playlist", this::playlist));
     actions.addView(Ui.button(this, "USB", this::chooseUsb));
-    actions.addView(Ui.button(this, "‹", () -> playIndex(selected - 1)));
-    playButton = Ui.button(this, "▶ / Ⅱ", this::playPause);
-    actions.addView(playButton);
-    actions.addView(Ui.button(this, "■", this::stop));
-    actions.addView(Ui.button(this, "›", () -> playIndex(selected + 1)));
-    recordButton = Ui.button(this, "● Record", this::record);
-    actions.addView(recordButton);
+    LinearLayout transport = Ui.row(this);
+    transport.setGravity(Gravity.CENTER);
+    transport.addView(Ui.iconButton(this, "‹", "Previous video", () -> playIndex(selected - 1)));
+    playButton = Ui.iconButton(this, "▶ / Ⅱ", "Play or pause video", this::playPause);
+    transport.addView(playButton);
+    transport.addView(Ui.iconButton(this, "■", "Stop video", this::stop));
+    transport.addView(Ui.iconButton(this, "›", "Next video", () -> playIndex(selected + 1)));
+    recordButton = Ui.iconButton(this, "●", "Record video", this::record);
+    recordButton.setTextColor(0xfffb7185);
+    transport.addView(recordButton);
+    menuBody.addView(transport);
     actions.addView(Ui.button(this, "▣ Copy frame", () -> frame(false)));
     actions.addView(Ui.button(this, "Save frame", () -> frame(true)));
     actions.addView(Ui.button(this, "Copy recording", this::copyRecording));
-    menu.addView(Ui.scrollRow(this, actions));
+    menuBody.addView(Ui.scrollRow(this, actions));
     LinearLayout more = Ui.row(this);
     more.addView(Ui.button(this, "Mode / FPS", this::chooseMode));
     more.addView(Ui.button(this, "Audio input", this::chooseAudio));
@@ -357,7 +384,7 @@ public final class MainActivity extends ComponentActivity {
                   progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
               store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
             }));
-    menu.addView(Ui.scrollRow(this, more));
+    menuBody.addView(Ui.scrollRow(this, more));
     progress.setVisibility(
         Boolean.parseBoolean(store.text("timeline", "true")) ? View.VISIBLE : View.GONE);
     LinearLayout levels = Ui.row(this);
@@ -387,7 +414,7 @@ public final class MainActivity extends ComponentActivity {
           menu.setAlpha(Math.max(.35f, v));
           store.putLevel("menuOpacity", menu.getAlpha());
         });
-    menu.addView(levels);
+    menuBody.addView(levels);
     menu.setVisibility(View.GONE);
     root.setOnGenericMotionListener((v, e) -> adjustWheel(e));
     menu.setOnGenericMotionListener(
@@ -1125,6 +1152,12 @@ public final class MainActivity extends ComponentActivity {
         .show();
   }
 
+  private void setRecordingLabel(String label) {
+    recordButton.setText(label.startsWith("●") ? "●" : label.startsWith("■") ? "■" : "…");
+    recordButton.setContentDescription(label);
+    recordButton.setTooltipText(label);
+  }
+
   private void record() {
     if (recorder != null) {
       finishCaptureRecording();
@@ -1186,7 +1219,7 @@ public final class MainActivity extends ComponentActivity {
                   () -> {
                     busy = false;
                     if (closed || recorder != recording) return;
-                    recordButton.setText("■ Stop recording");
+                    setRecordingLabel("■ Stop recording");
                     message(
                         audio
                             ? "Recording USB video and selected USB audio."
@@ -1203,7 +1236,7 @@ public final class MainActivity extends ComponentActivity {
     } else if (player != null && fileUri != null && player.isPlaying()) {
       pendingLocalClip = exportFile("Clip", "mp4");
       localClipStart = player.getCurrentPosition();
-      recordButton.setText("■ Stop recording");
+      setRecordingLabel("■ Stop recording");
       message("Marking a local video segment. Stop recording to export it.");
     } else message("Play a video or connect capture before recording.");
   }
@@ -1223,13 +1256,13 @@ public final class MainActivity extends ComponentActivity {
       recorder = null;
     }
     if (recording != null) {
-      recordButton.setText("Saving…");
+      setRecordingLabel("Saving…");
       io.execute(
           () -> {
             recording.close();
             main.post(
                 () -> {
-                  if (!closed) recordButton.setText("● Record");
+                  if (!closed) setRecordingLabel("● Record");
                 });
           });
     }
@@ -1242,7 +1275,7 @@ public final class MainActivity extends ComponentActivity {
     long end = player.getCurrentPosition();
     if (end - localClipStart < 250) {
       message("Record a longer passage before saving.");
-      recordButton.setText("● Record");
+      setRecordingLabel("● Record");
       return;
     }
     busy = true;
@@ -1269,7 +1302,7 @@ public final class MainActivity extends ComponentActivity {
                       return;
                     }
                     busy = false;
-                    recordButton.setText("● Record");
+                    setRecordingLabel("● Record");
                     saveVideo(output);
                   }
 
@@ -1283,7 +1316,7 @@ public final class MainActivity extends ComponentActivity {
                       return;
                     }
                     busy = false;
-                    recordButton.setText("● Record");
+                    setRecordingLabel("● Record");
                     output.delete();
                     message("Clip export: " + error.getMessage());
                   }
@@ -1296,7 +1329,7 @@ public final class MainActivity extends ComponentActivity {
       clipExportFile = null;
       output.delete();
       busy = false;
-      recordButton.setText("● Record");
+      setRecordingLabel("● Record");
       message("Clip export: " + error.getMessage());
     }
   }
@@ -1606,13 +1639,8 @@ public final class MainActivity extends ComponentActivity {
                   toggleAudioPanel();
                 }
               });
-      FrameLayout.LayoutParams p =
-          new FrameLayout.LayoutParams(
-              Math.max(dp(400), root.getWidth() * 4 / 5),
-              Math.max(dp(360), root.getHeight() * 4 / 5));
-      p.leftMargin = dp(24);
-      p.topMargin = dp(36);
-      root.addView(browser, p);
+      root.addView(browser, new FrameLayout.LayoutParams(1, 1));
+      browser.layoutWithinParent();
     }
     browser.toggle();
   }
@@ -1637,7 +1665,7 @@ public final class MainActivity extends ComponentActivity {
             new String[] {"Video audio", "Microphone"}));
     audioSource.setSelection(
         "microphone".equals(store.text("transcriptionSource", "video")) ? 1 : 0);
-    row.addView(audioSource, new LinearLayout.LayoutParams(dp(160), dp(38)));
+    row.addView(audioSource, new LinearLayout.LayoutParams(dp(160), dp(48)));
     audioStart = Ui.button(this, "Start capture", this::toggleAudio);
     row.addView(audioStart);
     row.addView(Ui.button(this, "Cancel", this::cancelAudio));
@@ -1693,7 +1721,7 @@ public final class MainActivity extends ComponentActivity {
             10,
             0xff91a0b7);
     audioPanel.addView(transcriptStatus);
-    browser.addView(audioPanel);
+    browser.setTranscriptPanel(audioPanel);
     audioPanel.setVisibility(View.GONE);
   }
 
@@ -1734,7 +1762,7 @@ public final class MainActivity extends ComponentActivity {
           transcript.setEnabled(false);
           transcriptStatus.setText(
               mic
-                  ? "Listening to tablet microphone. Final transcription after Stop."
+                  ? "Listening to device microphone. Final transcription after Stop."
                   : "Capturing only video source audio.");
           if (mic) {
             if (player != null) player.setVolume(0);

@@ -32,15 +32,26 @@ final class Ui {
     b.setAllCaps(false);
     b.setTextSize(12);
     b.setTextColor(0xffe8eef7);
-    b.setMinHeight(dp(c, 36));
-    b.setMinimumHeight(dp(c, 36));
+    b.setMinHeight(dp(c, 48));
+    b.setMinimumHeight(dp(c, 48));
     b.setPadding(dp(c, 10), dp(c, 4), dp(c, 10), dp(c, 4));
     b.setBackground(panel(0xff253246, dp(c, 9)));
-    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, dp(c, 38));
+    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, dp(c, 48));
     p.setMargins(dp(c, 2), dp(c, 2), dp(c, 2), dp(c, 2));
     b.setLayoutParams(p);
     b.setOnClickListener(v -> action.run());
     return b;
+  }
+
+  static Button iconButton(Context c, String glyph, String description, Runnable action) {
+    Button button = button(c, glyph, action);
+    button.setMinWidth(0);
+    button.setMinimumWidth(0);
+    button.setPadding(0, 0, 0, 0);
+    button.setContentDescription(description);
+    button.setTooltipText(description);
+    button.setLayoutParams(new LinearLayout.LayoutParams(dp(c, 48), dp(c, 48)));
+    return button;
   }
 
   static LinearLayout row(Context c) {
@@ -58,7 +69,7 @@ final class Ui {
 
   static HorizontalScrollView scrollRow(Context c, View row) {
     HorizontalScrollView s = new HorizontalScrollView(c);
-    s.setHorizontalScrollBarEnabled(false);
+    s.setHorizontalScrollBarEnabled(true);
     s.addView(row);
     return s;
   }
@@ -69,6 +80,7 @@ final class Ui {
 
   static SeekBar slider(Context c, float value, Level action) {
     SeekBar s = new SeekBar(c);
+    s.setMinHeight(dp(c, 48));
     s.setMax(1000);
     s.setProgress(Math.round(value * 1000));
     s.setOnSeekBarChangeListener(

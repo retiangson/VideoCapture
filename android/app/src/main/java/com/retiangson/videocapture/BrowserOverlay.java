@@ -31,6 +31,10 @@ final class BrowserOverlay extends LinearLayout {
   private final Host host;
   private final LinearLayout tabs = Ui.row(getContext()), navigation = Ui.row(getContext());
   private final FrameLayout page;
+  private final LinearLayout tools;
+  private final ScrollView toolsScroll;
+  private boolean positioned;
+  private int parentWidth, parentHeight;
   private final EditText address;
   private final List<WebView> views = new ArrayList<>();
   private final List<String> titles = new ArrayList<>();
@@ -57,27 +61,29 @@ final class BrowserOverlay extends LinearLayout {
     setAlpha(Math.max(.3f, store.level("browserOpacity", 1)));
     LinearLayout title = Ui.row(activity);
     TextView grip = Ui.text(activity, "⋮⋮  Browser", 13, Color.WHITE);
-    title.addView(grip, new LinearLayout.LayoutParams(0, Ui.dp(activity, 38), 1));
-    title.addView(Ui.text(activity, "Opacity", 10, 0xff91a0b7));
+    title.addView(grip, new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
+
     opacity = Ui.slider(activity, getAlpha(), v -> opacity(v));
     opacity.setMin(300);
-    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 100), -2));
-    title.addView(Ui.button(activity, "—", () -> setVisibility(GONE)));
-    title.addView(Ui.button(activity, "□", this::maximize));
-    title.addView(Ui.button(activity, "×", () -> setVisibility(GONE)));
+    opacity.setContentDescription("Browser panel opacity");
+    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 80), Ui.dp(activity, 48)));
+    title.addView(Ui.iconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
+    title.addView(Ui.iconButton(activity, "□", "Maximize or restore browser", this::maximize));
+    title.addView(Ui.iconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
     addView(title);
     grip.setOnTouchListener(
         (v, e) -> {
           if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
             downX = e.getRawX();
             downY = e.getRawY();
-            startX = getX();
-            startY = getY();
+            FrameLayout.LayoutParams bounds = (FrameLayout.LayoutParams) getLayoutParams();
+            startX = bounds.leftMargin;
+            startY = bounds.topMargin;
             return true;
           }
           if (e.getActionMasked() == MotionEvent.ACTION_MOVE && !maximized) {
-            setX(Math.max(0, startX + e.getRawX() - downX));
-            setY(Math.max(0, startY + e.getRawY() - downY));
+            moveTo(
+                Math.round(startX + e.getRawX() - downX), Math.round(startY + e.getRawY() - downY));
             return true;
           }
           if (e.getActionMasked() == MotionEvent.ACTION_UP) {
@@ -95,52 +101,69 @@ final class BrowserOverlay extends LinearLayout {
         });
     LinearLayout tabRow = Ui.row(activity);
     tabRow.addView(
-        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 34), 1));
-    tabRow.addView(Ui.button(activity, "+", () -> add(HOME)));
+        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 52), 1));
+    tabRow.addView(Ui.iconButton(activity, "+", "New browser tab", () -> add(HOME)));
     addView(tabRow);
     page = new FrameLayout(activity);
     addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
+    tools = Ui.column(activity);
+    toolsScroll = new ScrollView(activity);
+    toolsScroll.addView(tools, new ScrollView.LayoutParams(-1, -2));
+    addView(toolsScroll, new LinearLayout.LayoutParams(-1, -2));
     Button nav =
         Ui.button(
             activity,
             "⌕  Navigation",
             () -> navigation.setVisibility(navigation.getVisibility() == VISIBLE ? GONE : VISIBLE));
-    addView(nav);
+
     navigation.addView(
-        Ui.button(
+        Ui.iconButton(
             activity,
             "‹",
+            "Browser back",
             () -> {
               WebView w = current();
               if (w != null && w.canGoBack()) w.goBack();
             }));
     navigation.addView(
-        Ui.button(
+        Ui.iconButton(
             activity,
             "›",
+            "Browser forward",
             () -> {
               WebView w = current();
               if (w != null && w.canGoForward()) w.goForward();
             }));
     navigation.addView(
-        Ui.button(
+        Ui.iconButton(
             activity,
             "↻",
+            "Reload browser",
             () -> {
               if (current() != null) current().reload();
             }));
     address = Ui.input(activity, "https:// address");
     address.setSingleLine(true);
-    navigation.addView(address, new LinearLayout.LayoutParams(0, Ui.dp(activity, 38), 1));
-    navigation.addView(Ui.button(activity, "Go", () -> navigate(address.getText().toString())));
-    addView(navigation);
+    navigation.addView(address, new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
+    address.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_GO);
+    address.setOnEditorActionListener(
+        (v, action, event) -> {
+          if (action != android.view.inputmethod.EditorInfo.IME_ACTION_GO) return false;
+          navigate(address.getText().toString());
+          return true;
+        });
+    navigation.addView(
+        Ui.iconButton(
+            activity, "→", "Open browser address", () -> navigate(address.getText().toString())));
+    tools.addView(navigation);
     navigation.setVisibility(GONE);
     LinearLayout actions = Ui.row(activity);
+    actions.addView(nav);
     actions.addView(Ui.button(activity, "▣ Frame", host::frame));
     actions.addView(Ui.button(activity, "● Record", host::record));
     actions.addView(Ui.button(activity, "Aa Text", host::ocr));
     actions.addView(Ui.button(activity, "♫ Audio to text", host::audio));
-    addView(Ui.scrollRow(activity, actions));
+    tools.addView(Ui.scrollRow(activity, actions), 0);
     int savedIndex = 0;
     try {
       savedIndex = Integer.parseInt(store.text("browserSelected", "0"));
@@ -314,11 +337,11 @@ final class BrowserOverlay extends LinearLayout {
       title.setSingleLine(true);
       title.setEllipsize(android.text.TextUtils.TruncateAt.END);
       title.setMaxWidth(Ui.dp(activity, 150));
-      title.setMinHeight(Ui.dp(activity, 28));
+      title.setMinHeight(Ui.dp(activity, 48));
       tab.addView(title);
-      Button close = Ui.button(activity, "×", () -> closeTab(index));
+      Button close = Ui.iconButton(activity, "×", "Close browser tab", () -> closeTab(index));
       close.setPadding(0, 0, 0, 0);
-      tab.addView(close, new LinearLayout.LayoutParams(Ui.dp(activity, 26), Ui.dp(activity, 28)));
+      tab.addView(close, new LinearLayout.LayoutParams(Ui.dp(activity, 48), Ui.dp(activity, 48)));
       tabs.addView(tab);
     }
   }
@@ -380,25 +403,103 @@ final class BrowserOverlay extends LinearLayout {
     return super.dispatchGenericMotionEvent(event);
   }
 
+  void setTranscriptPanel(View panel) {
+    tools.addView(panel);
+  }
+
+  @Override
+  protected void onMeasure(int widthSpec, int heightSpec) {
+    // Leave space for browser content; tools remain scrollable when the IME or a short window
+    // reduces height.
+    int height = MeasureSpec.getSize(heightSpec);
+    int controls = Math.max(Ui.dp(activity, 48), (height - Ui.dp(activity, 112)) / 2);
+    toolsScroll.getLayoutParams().height = Math.min(controls, toolsHeight());
+    super.onMeasure(widthSpec, heightSpec);
+  }
+
+  private int toolsHeight() {
+    int width =
+        Math.max(
+            1,
+            ((FrameLayout.LayoutParams) getLayoutParams()).width
+                - getPaddingLeft()
+                - getPaddingRight());
+    tools.measure(
+        MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+    return tools.getMeasuredHeight();
+  }
+
+  void layoutWithinParent() {
+    if (!(getParent() instanceof FrameLayout)) return;
+    FrameLayout parent = (FrameLayout) getParent();
+    int width = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+    int height = parent.getHeight() - parent.getPaddingTop() - parent.getPaddingBottom();
+    if (width < 1 || height < 1) return;
+    FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) getLayoutParams();
+    int previousWidth = p.width,
+        previousHeight = p.height,
+        previousLeft = p.leftMargin,
+        previousTop = p.topMargin;
+    if (maximized) {
+      p.width = width;
+      p.height = height;
+      p.leftMargin = 0;
+      p.topMargin = 0;
+    } else {
+      int margin = Math.min(Ui.dp(activity, 8), Math.min(width, height) / 8);
+      boolean compact = width < Ui.dp(activity, 600);
+      if (!positioned || width != parentWidth || height != parentHeight) {
+        p.width =
+            compact
+                ? width - 2 * margin
+                : Math.min(width - 2 * margin, Math.max(Ui.dp(activity, 400), width * 4 / 5));
+        p.height =
+            compact
+                ? height - 2 * margin
+                : Math.min(height - 2 * margin, Math.max(Ui.dp(activity, 280), height * 4 / 5));
+        if (!positioned) {
+          p.leftMargin = margin;
+          p.topMargin = margin;
+        }
+      }
+      p.width = Math.max(1, Math.min(p.width, width));
+      p.height = Math.max(1, Math.min(p.height, height));
+      p.leftMargin = Math.max(0, Math.min(p.leftMargin, width - p.width));
+      p.topMargin = Math.max(0, Math.min(p.topMargin, height - p.height));
+    }
+    parentWidth = width;
+    parentHeight = height;
+    positioned = true;
+    if (previousWidth != p.width
+        || previousHeight != p.height
+        || previousLeft != p.leftMargin
+        || previousTop != p.topMargin) setLayoutParams(p);
+  }
+
+  private void moveTo(int x, int y) {
+    FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) getLayoutParams();
+    p.leftMargin = Math.max(0, Math.min(x, parentWidth - p.width));
+    p.topMargin = Math.max(0, Math.min(y, parentHeight - p.height));
+    setLayoutParams(p);
+  }
+
   private void maximize() {
     FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) getLayoutParams();
     if (!maximized) {
-      oldWidth = getWidth();
-      oldHeight = getHeight();
-      oldX = getX();
-      oldY = getY();
-      p.width = -1;
-      p.height = -1;
-      setX(0);
-      setY(0);
+      oldWidth = p.width;
+      oldHeight = p.height;
+      oldX = p.leftMargin;
+      oldY = p.topMargin;
     } else {
       p.width = oldWidth;
       p.height = oldHeight;
-      setX(oldX);
-      setY(oldY);
+      p.leftMargin = Math.round(oldX);
+      p.topMargin = Math.round(oldY);
     }
     maximized = !maximized;
     setLayoutParams(p);
+    layoutWithinParent();
   }
 
   void pause() {
