@@ -19,6 +19,10 @@ import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public final class ResponsiveLayoutTests {
+  @Rule
+  public androidx.test.rule.GrantPermissionRule cameraPermission =
+      androidx.test.rule.GrantPermissionRule.grant(android.Manifest.permission.CAMERA);
+
   private static Object field(Object instance, String name) {
     try {
       Field f = instance.getClass().getDeclaredField(name);
@@ -65,6 +69,69 @@ public final class ResponsiveLayoutTests {
     assertTrue(
         "Panel extends beyond bottom/keyboard inset",
         panel.getBottom() <= root.getHeight() - root.getPaddingBottom());
+  }
+
+  @Test
+  public void startupShowsSourceActionsAndWindowedControls() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertFalse((Boolean) field(a, "fullscreen"));
+            assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility());
+            SourceChooser chooser = (SourceChooser) field(a, "sourceChooser");
+            assertEquals(View.VISIBLE, chooser.getVisibility());
+            assertInside((FrameLayout) field(a, "root"), chooser);
+            LinearLayout actions = (LinearLayout) chooser.getChildAt(chooser.getChildCount() - 1);
+            Rect full = new Rect(0, 0, actions.getWidth(), actions.getHeight());
+            chooser.offsetDescendantRectToMyCoords(actions, full);
+            assertTrue(
+                "Source buttons are clipped above the player menu",
+                full.top >= 0 && full.bottom <= chooser.getHeight());
+            assertEquals("Select USB", ((Button) actions.getChildAt(0)).getText().toString());
+            assertEquals("Open video", ((Button) actions.getChildAt(1)).getText().toString());
+            ((Button) field(a, "fullscreenButton")).performClick();
+            assertEquals(View.GONE, ((View) field(a, "menu")).getVisibility());
+            ((Button) field(a, "fullscreenButton")).performClick();
+            assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility());
+          });
+    }
+  }
+
+  @Test
+  public void sourceButtonOpensUsbPickerFeedback() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            SourceChooser chooser = (SourceChooser) field(a, "sourceChooser");
+            LinearLayout actions = (LinearLayout) chooser.getChildAt(chooser.getChildCount() - 1);
+            ((Button) actions.getChildAt(0)).performClick();
+          });
+      idle();
+      boolean feedback = false;
+      long deadline = SystemClock.uptimeMillis() + 5000;
+      while (!feedback && SystemClock.uptimeMillis() < deadline) {
+        android.view.accessibility.AccessibilityNodeInfo window =
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
+        feedback =
+            window != null
+                && (!window.findAccessibilityNodeInfosByText("USB video device").isEmpty()
+                    || !window
+                        .findAccessibilityNodeInfosByText("No USB capture device found")
+                        .isEmpty());
+        if (!feedback) SystemClock.sleep(100);
+      }
+      assertTrue("USB selection gave no visible device list or empty-state feedback", feedback);
+      InstrumentationRegistry.getInstrumentation()
+          .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertEquals(View.VISIBLE, ((View) field(a, "sourceChooser")).getVisibility());
+            assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility());
+          });
+    }
   }
 
   @Test

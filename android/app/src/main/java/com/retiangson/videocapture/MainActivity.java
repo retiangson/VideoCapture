@@ -49,11 +49,12 @@ public final class MainActivity extends ComponentActivity {
   private TextureView usbView;
   private View gesturesView;
   private LinearLayout menu, audioPanel;
+  private SourceChooser sourceChooser;
   private TextView status, position, transcriptStatus;
   private EditText transcript;
   private SeekBar seek;
   private ProgressBar levelMeter;
-  private Button playButton, recordButton, audioStart;
+  private Button playButton, recordButton, audioStart, fullscreenButton, hideMenuButton;
   private Spinner audioSource;
   private ExoPlayer player;
   private PlayerStore store;
@@ -62,7 +63,7 @@ public final class MainActivity extends ComponentActivity {
   private UsbCapture usb;
   private Surface usbSurface;
   private Size captureSize;
-  private boolean wantLive, live, closed, fullscreen = true, reading, busy, ocrBusy;
+  private boolean wantLive, live, closed, fullscreen = false, reading, busy, ocrBusy;
   private volatile boolean foreground = true;
   private volatile int audioJob;
   private boolean usbRetiring, restoredMode;
@@ -137,8 +138,9 @@ public final class MainActivity extends ComponentActivity {
                   else if (!browser.back()) browser.toggle();
                   return;
                 }
-                if (menu.getVisibility() == View.VISIBLE) {
+                if (fullscreen && menu.getVisibility() == View.VISIBLE) {
                   menu.setVisibility(View.GONE);
+                  layoutSourceChooser();
                   return;
                 }
                 if (fullscreen) {
@@ -193,6 +195,7 @@ public final class MainActivity extends ComponentActivity {
         (v, l, t, r, b, ol, ot, or, ob) -> {
           if (browser != null) browser.layoutWithinParent();
           fitCapture();
+          layoutSourceChooser();
           if (menu != null)
             menu.setTranslationY(
                 Math.min(
@@ -266,25 +269,28 @@ public final class MainActivity extends ComponentActivity {
               public void showMenu() {
                 menu.setVisibility(View.VISIBLE);
                 menu.bringToFront();
+                layoutSourceChooser();
               }
 
               public void hideMenu() {
-                menu.setVisibility(View.GONE);
+                if (fullscreen) {
+                  menu.setVisibility(View.GONE);
+                  layoutSourceChooser();
+                }
               }
 
               public void toggleBrowser() {
                 toggleBrowserPanel();
               }
             });
-    status =
-        Ui.text(
-            this,
-            "VIDEOCAPTURE  ·  Hold to show controls  ·  Two-finger tap for browser",
-            12,
-            0xff91a0b7);
+    status = Ui.text(this, "VIDEOCAPTURE  ·  Select USB or open a video to begin", 12, 0xff91a0b7);
     status.setPadding(dp(18), dp(12), dp(18), dp(10));
     FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
     root.addView(status, sp);
+    sourceChooser = new SourceChooser(this, this::chooseUsb, this::pickFiles);
+    root.addView(
+        sourceChooser, new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
+    status.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutSourceChooser());
     PlayerControls controls = new PlayerControls(this);
     menu = controls;
     LinearLayout menuBody = controls.content;
@@ -294,11 +300,21 @@ public final class MainActivity extends ComponentActivity {
     FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
     mp.setMargins(dp(18), 0, dp(18), dp(18));
     root.addView(menu, mp);
+    menu.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutSourceChooser());
     LinearLayout top = Ui.row(this);
     TextView grip = Ui.text(this, "⋮⋮  VideoCapture", 14, 0xffe8eef7);
     top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
-    top.addView(Ui.button(this, "Fullscreen", () -> setFullscreen(!fullscreen)));
-    top.addView(Ui.button(this, "Hide", () -> menu.setVisibility(View.GONE)));
+    fullscreenButton = Ui.button(this, "Fullscreen", () -> setFullscreen(!fullscreen));
+    top.addView(fullscreenButton);
+    hideMenuButton =
+        Ui.button(
+            this,
+            "Hide",
+            () -> {
+              menu.setVisibility(View.GONE);
+              layoutSourceChooser();
+            });
+    top.addView(hideMenuButton);
     menu.addView(top, 0);
     grip.setOnTouchListener(
         new View.OnTouchListener() {
@@ -432,7 +448,36 @@ public final class MainActivity extends ComponentActivity {
         });
     gesturesView.setOnGenericMotionListener((v, e) -> adjustWheel(e));
     root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitCapture());
-    setFullscreen(true);
+    setFullscreen(false);
+  }
+
+  private void showSourceChooser(boolean visible) {
+    sourceChooser.setVisibility(visible ? View.VISIBLE : View.GONE);
+    layoutSourceChooser();
+  }
+
+  private void layoutSourceChooser() {
+    if (sourceChooser == null || menu == null) return;
+    PlayerControls controls = (PlayerControls) menu;
+    if (sourceChooser.getVisibility() != View.VISIBLE) {
+      controls.heightLimit(Integer.MAX_VALUE);
+      return;
+    }
+    int width = root.getWidth() - root.getPaddingLeft() - root.getPaddingRight();
+    int height = root.getHeight() - root.getPaddingTop() - root.getPaddingBottom();
+    if (width <= 0 || height <= 0) return;
+    int top = status.getHeight() + dp(8);
+    controls.heightLimit(Math.max(dp(52), height - top - dp(26) - dp(64)));
+    int reserved = menu.getVisibility() == View.VISIBLE ? menu.getHeight() + dp(26) : dp(8);
+    FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) sourceChooser.getLayoutParams();
+    int newWidth = Math.max(1, Math.min(dp(480), width - dp(24)));
+    int newHeight = Math.max(0, height - top - reserved);
+    if (p.width != newWidth || p.height != newHeight || p.topMargin != top) {
+      p.width = newWidth;
+      p.height = newHeight;
+      p.topMargin = top;
+      sourceChooser.setLayoutParams(p);
+    }
   }
 
   private int dp(float value) {
@@ -462,6 +507,10 @@ public final class MainActivity extends ComponentActivity {
 
   private void setFullscreen(boolean value) {
     fullscreen = value;
+    menu.setVisibility(value ? View.GONE : View.VISIBLE);
+    hideMenuButton.setVisibility(value ? View.VISIBLE : View.GONE);
+    fullscreenButton.setText(value ? "Exit fullscreen" : "Fullscreen");
+    layoutSourceChooser();
     WindowInsetsControllerCompat controller =
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
     if (value) {
@@ -521,6 +570,7 @@ public final class MainActivity extends ComponentActivity {
 
           @Override
           public void onPlayerError(PlaybackException error) {
+            showSourceChooser(true);
             message("Playback: " + error.getMessage());
           }
 
@@ -579,6 +629,7 @@ public final class MainActivity extends ComponentActivity {
                     MediaItem.fromUri(uri), store.resume(uri.toString(), fileSize, fileModified));
                 player.prepare();
                 player.play();
+                showSourceChooser(false);
                 message("LOCAL · " + name(uri));
               });
         });
@@ -653,6 +704,7 @@ public final class MainActivity extends ComponentActivity {
     if (live) {
       wantLive = false;
       stopUsb();
+      showSourceChooser(true);
     }
     message("Stopped.");
   }
@@ -702,6 +754,7 @@ public final class MainActivity extends ComponentActivity {
                 }
               }
               store.list("playlist", queue);
+              if (fileUri == null && !live) showSourceChooser(true);
             })
         .show();
   }
@@ -723,7 +776,12 @@ public final class MainActivity extends ComponentActivity {
                               + d.getProductId())
                   .toArray(String[]::new);
           if (labels.length == 0) {
-            message("Connect the HDMI card through USB-C/OTG. Camera permission is required.");
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("No USB capture device found")
+                .setMessage(
+                    "Connect the HDMI capture card through USB-C/OTG, then select USB again.")
+                .setPositiveButton("Close", null)
+                .show();
             return;
           }
           new android.app.AlertDialog.Builder(this)
@@ -740,6 +798,7 @@ public final class MainActivity extends ComponentActivity {
                     fileUri = null;
                     playerView.setVisibility(View.GONE);
                     usbView.setVisibility(View.VISIBLE);
+                    message("Opening USB capture device…");
                     usb.select(devices.get(index));
                   })
               .show();
@@ -775,6 +834,7 @@ public final class MainActivity extends ComponentActivity {
                       if (closed || token != usbGeneration || usb == null) return;
                       captureSize = mode;
                       live = true;
+                      showSourceChooser(false);
                       if (!restoredMode) {
                         restoredMode = true;
                         String[] saved = store.text("usbMode", "").split(",");
@@ -818,6 +878,7 @@ public final class MainActivity extends ComponentActivity {
                     () -> {
                       if (closed || token != usbGeneration) return;
                       live = false;
+                      showSourceChooser(true);
                       finishCaptureRecording();
                       if (audioCapturing && !microphoneSelected()) cancelAudio();
                       closeUsbAudio();

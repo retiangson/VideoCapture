@@ -6,6 +6,7 @@ import android.widget.*;
 /** Keep controls reachable in short windows without covering the entire video. */
 final class PlayerControls extends LinearLayout {
   final LinearLayout content;
+  private int heightLimit = Integer.MAX_VALUE;
 
   PlayerControls(Context context) {
     super(context);
@@ -17,11 +18,18 @@ final class PlayerControls extends LinearLayout {
     addView(scroll, new LinearLayout.LayoutParams(-1, -2));
   }
 
+  void heightLimit(int pixels) {
+    if (heightLimit != pixels) {
+      heightLimit = pixels;
+      requestLayout();
+    }
+  }
+
   @Override
   protected void onMeasure(int widthSpec, int heightSpec) {
     if (MeasureSpec.getMode(heightSpec) != MeasureSpec.UNSPECIFIED) {
       int limit = Math.max(1, Math.round(MeasureSpec.getSize(heightSpec) * .75f));
-      heightSpec = MeasureSpec.makeMeasureSpec(limit, MeasureSpec.AT_MOST);
+      heightSpec = MeasureSpec.makeMeasureSpec(Math.min(limit, heightLimit), MeasureSpec.AT_MOST);
     }
     super.onMeasure(widthSpec, heightSpec);
   }

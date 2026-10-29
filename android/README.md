@@ -26,13 +26,17 @@ The APK contains both ABIs and the offline model (~218 MiB). First transcription
 
 ## Phone layouts
 
-Version 0.2.0 keeps playback/recording controls in a dedicated row and uses horizontally scrollable rows for secondary actions. Buttons have 48 dp touch targets; short windows get a vertically scrollable player panel capped at 75% of available height. The browser fits within the actual window, clamps dragging to its bounds, and reflows when rotated or when the keyboard opens. Its address field has compact navigation buttons. Browser tools/transcription scroll independently so they remain reachable without displacing the entire web page. Maximize/restore uses the current window and system/keyboard insets.
+Version 0.2.1 keeps playback/recording controls in a dedicated row and uses horizontally scrollable rows for secondary actions. Buttons have 48 dp touch targets; short windows get a vertically scrollable player panel capped at 75% of available height. The browser fits within the actual window, clamps dragging to its bounds, and reflows when rotated or when the keyboard opens. Its address field has compact navigation buttons. Browser tools/transcription scroll independently so they remain reachable without displacing the entire web page. Maximize/restore uses the current window and system/keyboard insets.
 
 This improves layouts; it does not add background recording or built-in camera capture. Real phones still need device/USB/audio validation. USB capture requires OTG/USB host support and sufficient power for the card.
 
 ## Use
 
-- Long press the video for 450 ms to show the player menu. Release keeps it visible; a quick tap on the video hides it. Two-finger quick tap toggles the browser. Gestures on browser content retain normal browser behavior.
+The app starts in normal mode with visible player controls and **Select USB** / **Open video** source buttons. No gesture is needed to find the device picker. Select USB to list capture devices; an empty list produces a visible dialog. A selected card still opens automatically after permission. Close other camera apps before using the capture card here.
+
+Choose **Fullscreen** explicitly for immersive playback. That hides the player menu; **Exit fullscreen** or Back restores normal mode and its visible controls. Quick taps do not hide the normal player controls.
+
+- In fullscreen, long press the video for 450 ms to show the player menu. Release keeps it visible; a quick tap on the video hides it. Two-finger quick tap toggles the browser. Gestures on browser content retain normal browser behavior.
 - **Open** selects local media through Android's file picker; **Playlist** manages saved entries. The app remembers position, volume, opacity, tabs, and USB choices. File positions checkpoint every five seconds and on pause. Cloud document providers may need their own network connection; copy media locally for offline use.
 - **USB** selects an attached capture card and immediately opens it after Android grants USB access. **Mode / FPS** show device-advertised modes; the 4K label alone does not establish capture output capability. **Audio input** must explicitly select the capture card's audio input. It never falls back to the room microphone for video audio.
 - **Fit / Fill** crops to fill the screen without stretching. Choose Fit to fit the entire picture; bars are expected when source/display aspect ratios differ.
@@ -56,6 +60,6 @@ adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-android
 adb shell am instrument -w -r -e requireOffline true com.retiangson.videocapture.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Use `adb -s SERIAL` with multiple devices. Instrumentation clears the **debug package's** preferences and uses synthetic media; run it on a disposable test profile. Require the final `OK (14 tests)`; `adb shell am instrument` may exit with code zero even when tests fail. Tests exercise native touchscreen gestures, real decoding/resume, browser restoration and exact-origin mic grant/deny, offline OCR/Whisper, selected audio extraction, embedded MKV text cues, local clip export, source-only EGL surface recording with PCM, rejection of microphone fallback, window bounds, keyboard insets, maximize/restore and live rotation. A headless emulator can grant browser mic permission yet report no readable microphone; physical browser mic capture remains a tablet check.
+Use `adb -s SERIAL` with multiple devices. Instrumentation clears the **debug package's** preferences and uses synthetic media; run it on a disposable test profile. Require the final `OK (16 tests)`; `adb shell am instrument` may exit with code zero even when tests fail. Tests exercise native touchscreen gestures, real decoding/resume, browser restoration and exact-origin mic grant/deny, offline OCR/Whisper, selected audio extraction, embedded MKV text cues, local clip export, source-only EGL surface recording with PCM, rejection of microphone fallback, window bounds, keyboard insets, maximize/restore and live rotation. A headless emulator can grant browser mic permission yet report no readable microphone; physical browser mic capture remains a tablet check.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependencies and source/license links.

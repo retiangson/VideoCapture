@@ -74,6 +74,8 @@ public final class AndroidParityTests {
       scenario.onActivity(
           a -> {
             overlay.set((View) field(a, "gesturesView"));
+            assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility());
+            ((Button) field(a, "fullscreenButton")).performClick();
             assertEquals(View.GONE, ((View) field(a, "menu")).getVisibility());
           });
       int[] at = new int[2];
