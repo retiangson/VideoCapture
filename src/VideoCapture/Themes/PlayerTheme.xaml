@@ -6,7 +6,9 @@
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Grid>
    <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"/>
    <Border x:Name="Hover" Background="White" Opacity="0" CornerRadius="8"/><ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+   <Ellipse x:Name="ActiveMark" Width="5" Height="5" Fill="{StaticResource Accent}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4" Visibility="Collapsed" IsHitTestVisible="False"/>
   </Grid><ControlTemplate.Triggers>
+   <Trigger Property="ui:ButtonState.IsActive" Value="True"><Setter TargetName="Surface" Property="Background" Value="#245548"/><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Accent}"/><Setter TargetName="Surface" Property="BorderThickness" Value="2"/><Setter TargetName="ActiveMark" Property="Visibility" Value="Visible"/><Setter Property="Foreground" Value="#E5FFF8"/></Trigger>
    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Opacity" Value="0.07"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Hover" Property="Opacity" Value="0.14"/></Trigger>
    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
   </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>

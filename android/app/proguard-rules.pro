@@ -1,0 +1,3 @@
+-keep class com.retiangson.videocapture.OfflineSpeech { *; }
+-keep class com.herohan.uvcapp.** { *; }
+-keep class com.serenegiant.usb.** { *; }

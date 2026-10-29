@@ -16,7 +16,7 @@
    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
     <Button x:Name="OpenButton" Click="Open_Click" Style="{StaticResource AccentButton}"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="Open videos"/></StackPanel></Button>
     <Button Content="&#xE8B7;" Style="{StaticResource IconButton}" Click="Folder_Click" ToolTip="Recordings folder" AutomationProperties.Name="Recordings folder"/>
-    <Button Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser (Ctrl+Shift+B)" AutomationProperties.Name="Floating browser"/>
+    <Button x:Name="BrowserButton" Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser (Ctrl+Shift+B)" AutomationProperties.Name="Floating browser"/>
     <Button Content="&#xE8AE;" Style="{StaticResource IconButton}" Click="Cec_Click" ToolTip="CEC remote" AutomationProperties.Name="CEC remote" Margin="0"/>
    </StackPanel>
   </Grid>
@@ -50,7 +50,7 @@
        <TextBlock x:Name="RecordingTime" FontSize="20" Foreground="#FF91AC"/>
        <Border Height="1" Background="#29364B" Margin="0,0,0,14"/>
        <TextBlock Text="PICTURE &amp; TOOLS" Foreground="#5CE0C1" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
-       <TextBlock Text="Picture fit" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PictureFit" SelectedIndex="0" SelectionChanged="PictureFit_Changed"><ComboBoxItem Content="Fit · whole picture"/><ComboBoxItem Content="Fill · crop edges"/></ComboBox>
+       <TextBlock Text="Picture fit" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PictureFit" SelectedIndex="0" SelectionChanged="PictureFit_Changed"><ComboBoxItem Content="Regular · whole picture"/><ComboBoxItem Content="Fill · crop edges"/><ComboBoxItem Content="Stretch · change proportions"/></ComboBox>
        <TextBlock Text="Renderer · stop to change" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PreviewRenderer" SelectedIndex="0" SelectionChanged="PreviewRenderer_Changed"><ComboBoxItem Content="GPU · fastest"/><ComboBoxItem Content="Compatibility · CPU"/></ComboBox>
        <DockPanel><TextBlock Text="Menu opacity" Style="{StaticResource FieldLabel}"/><TextBlock Text="{Binding Value, ElementName=MenuOpacity, StringFormat={}{0:P0}}" Foreground="#E8EEF7" HorizontalAlignment="Right"/></DockPanel>
        <Slider x:Name="MenuOpacity" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" Margin="0,0,0,12" ToolTip="Opacity of the entire fullscreen menu"/>
@@ -107,7 +107,7 @@
      <StackPanel VerticalAlignment="Center"><TextBlock x:Name="NowPlayingTitle" Text="Ready when you are" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" MaxWidth="300" HorizontalAlignment="Left"/><TextBlock x:Name="NowPlayingKind" Text="OPEN A VIDEO OR CONNECT A SOURCE" Foreground="#7F90AA" FontSize="9" Margin="0,4,0,0"/></StackPanel>
      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
       <Button x:Name="PreviousButton" Content="&#xE892;" Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Previous video" AutomationProperties.Name="Previous video"/>
-      <Button x:Name="PauseButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Pause_Click" Background="#5CE0C1" Foreground="#09251F" BorderBrush="#5CE0C1" Width="44" Height="44" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause" IsEnabled="False"/>
+      <Button x:Name="PauseButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Pause_Click" Width="44" Height="44" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause" IsEnabled="False"/>
       <Button x:Name="StopButton" Content="&#xE71A;" Style="{StaticResource IconButton}" Click="Stop_Click" ToolTip="Stop" AutomationProperties.Name="Stop" IsEnabled="False"/>
       <Button x:Name="NextButton" Content="&#xE893;" Style="{StaticResource IconButton}" Click="Next_Click" ToolTip="Next video" AutomationProperties.Name="Next video"/>
      </StackPanel>
@@ -116,7 +116,7 @@
        <DockPanel><TextBlock Text="Video" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=Volume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/></DockPanel>
        <DockPanel><TextBlock Text="Reading" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=SpeechVolume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="SpeechVolume" Width="100" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/></DockPanel>
       </StackPanel>
-      <Button Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="12,0,0,0"/>
+      <Button x:Name="FullscreenButton" Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="12,0,0,0"/>
      </StackPanel>
     </Grid>
     <TextBlock x:Name="Status" Text="Ready — select a capture device or open a movie." Foreground="#7F90AA" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,9,0,0"/>

@@ -15,7 +15,7 @@
    </DockPanel>
    <WrapPanel Margin="0,0,0,8">
     <Button x:Name="PreviousButton" Content="&#xE892;" Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Previous video" AutomationProperties.Name="Previous video"/>
-    <Button x:Name="PlayButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Play_Click" Background="#5CE0C1" Foreground="#09251F" BorderBrush="#5CE0C1" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause"/>
+    <Button x:Name="PlayButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Play_Click" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause"/>
     <Button x:Name="StopButton" Content="&#xE71A;" Style="{StaticResource IconButton}" Click="Stop_Click" ToolTip="Stop" AutomationProperties.Name="Stop"/>
     <Button x:Name="NextButton" Content="&#xE893;" Style="{StaticResource IconButton}" Click="Next_Click" ToolTip="Next video" AutomationProperties.Name="Next video"/>
     <Button x:Name="RecordButton" Click="Record_Click" Background="#9B344E" BorderBrush="#B64662" Margin="3,0,12,0"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordLabel" Text="Record"/></StackPanel></Button>
@@ -26,10 +26,10 @@
     <Button x:Name="ScreenTextButton" Content="&#xE7C4;" Style="{StaticResource IconButton}" Click="ScreenText_Click" ToolTip="Select screen text (Ctrl+Shift+X)" AutomationProperties.Name="Screen text"/>
     <Button x:Name="SaveFrameButton" Content="&#xE74E;" Style="{StaticResource IconButton}" Click="SaveFrame_Click" ToolTip="Save frame" AutomationProperties.Name="Save frame"/>
     <Button x:Name="CopyRecordingButton" Content="&#xE8C8;" Style="{StaticResource IconButton}" Click="CopyRecording_Click" ToolTip="Copy last recording file" AutomationProperties.Name="Copy recording"/>
-    <Button x:Name="FitButton" Content="&#xE9A6;" Style="{StaticResource IconButton}" Click="Fit_Click" ToolTip="Show whole frame" AutomationProperties.Name="Picture fit"/>
+    <Button x:Name="FitButton" Content="Regular" Click="Fit_Click" ToolTip="Show whole frame" AutomationProperties.Name="Picture fit"/>
     <Button x:Name="SpeechButton" Content="Read aloud" Click="Speech_Click" ToolTip="Toggle subtitle speech"/>
     <Button x:Name="ProgressButton" Content="Timeline" Click="Progress_Click" ToolTip="Hide video progress"/>
-    <Button Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser" AutomationProperties.Name="Browser"/>
+    <Button x:Name="BrowserButton" Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser" AutomationProperties.Name="Browser"/>
     <Button Content="&#xE8AE;" Style="{StaticResource IconButton}" Click="Cec_Click" ToolTip="CEC remote" AutomationProperties.Name="CEC remote"/>
     <Button x:Name="ExitButton" Content="&#xE73F;" Style="{StaticResource IconButton}" Click="Exit_Click" ToolTip="Exit fullscreen (Esc)" AutomationProperties.Name="Exit fullscreen" Margin="0"/>
    </WrapPanel>

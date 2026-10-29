@@ -46,7 +46,7 @@ internal sealed record AppPreferences
         Playlist = (Playlist ?? []).Where(ValidPlaylistPath).Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(PlaybackQueue.MaximumEntries).ToList(),
         PlaylistSelectedIndex = Math.Clamp(PlaylistSelectedIndex, -1, PlaybackQueue.MaximumEntries - 1),
-        PictureFit = PictureFit is 0 or 1 ? PictureFit : 0,
+        PictureFit = PictureFit is 0 or 1 or 2 ? PictureFit : 0,
         CaptureModes = (CaptureModes ?? []).Where(entry => ValidName(entry.Key) && entry.Value is
             { Width: > 0 and <= 8192, Height: > 0 and <= 8192, FrameInterval: > 0 and <= 1_000_000_000, Chroma.Length: > 0 and <= 16 })
             .Take(64).ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal)

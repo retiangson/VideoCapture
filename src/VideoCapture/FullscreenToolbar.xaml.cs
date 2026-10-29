@@ -1,3 +1,4 @@
+using VideoCapture.Controls;
 using System.Windows;
 using System.Windows.Input;
 
@@ -9,7 +10,9 @@ public partial class FullscreenToolbar : Window
     public event EventHandler? CopyTextRequested, ScreenTextRequested, BrowserRequested, HideRequested;
     public event EventHandler? PreviousRequested, NextRequested, PlayRequested, StopRequested, OpenRequested, PlaylistRequested, MenuOpacityRequested, VolumeRequested;
     public event EventHandler? SpeechRequested, SpeechVolumeRequested, ProgressVisibilityRequested, SeekRequested;
-    public void SetSpeechEnabled(bool enabled) => SpeechButton.Content = enabled ? "Reading on" : "Read aloud";
+    public void SetSpeechEnabled(bool enabled) { SpeechButton.Content = enabled ? "Reading on" : "Read aloud"; ButtonState.SetIsActive(SpeechButton, enabled); }
+    public void SetFullscreenActive(bool active) => ButtonState.SetIsActive(ExitButton, active);
+    public void SetBrowserVisible(bool visible) => ButtonState.SetIsActive(BrowserButton, visible);
     private void Speech_Click(object sender, RoutedEventArgs e) => SpeechRequested?.Invoke(this, EventArgs.Empty);
     private bool _updatingLevels;
     private bool _updatingProgress, _draggingProgress;
@@ -28,6 +31,7 @@ public partial class FullscreenToolbar : Window
     }
     public void SetProgressVisible(bool visible)
     {
+        ButtonState.SetIsActive(ProgressButton, visible);
         ProgressPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         ProgressButton.ToolTip = visible ? "Hide video progress" : "Show video progress";
     }
@@ -52,6 +56,7 @@ public partial class FullscreenToolbar : Window
     public void Update(bool recordEnabled, bool recording, string elapsed, bool canCapture, bool canCopyRecording, bool actionsEnabled)
     {
         RecordButton.IsEnabled = recordEnabled;
+        ButtonState.SetIsActive(RecordButton, recording);
         RecordLabel.Text = recording ? "Stop recording" : "Record";
         Elapsed.Text = elapsed;
         CopyFrameButton.IsEnabled = SaveFrameButton.IsEnabled = canCapture;
@@ -61,9 +66,18 @@ public partial class FullscreenToolbar : Window
     }
 
     public void SetFeedback(string message) => Feedback.Text = message;
-    public void SetFillMode(bool fill) => FitButton.ToolTip = fill ? "Show whole frame" : "Fill screen";
+    public void SetFillMode(bool fill) => SetPictureMode(fill ? 1 : 0);
+    public void SetPictureMode(int mode)
+    {
+        string label = mode switch { 1 => "Fill", 2 => "Stretch", _ => "Regular" };
+        FitButton.Content = label;
+        FitButton.ToolTip = $"Picture: {label} · click to cycle Regular, Fill, Stretch";
+        ButtonState.SetIsActive(FitButton, mode != 0);
+        System.Windows.Automation.AutomationProperties.SetItemStatus(FitButton, label);
+    }
     public void SetTransport(bool canPlay, bool playing, bool canStop, bool canPrevious, bool canNext)
     {
+        ButtonState.SetIsActive(PlayButton, playing);
         PlayButton.IsEnabled = canPlay; PlayButton.Content = playing ? "\uE769" : "\uE768";
         StopButton.IsEnabled = canStop; PreviousButton.IsEnabled = canPrevious; NextButton.IsEnabled = canNext;
     }

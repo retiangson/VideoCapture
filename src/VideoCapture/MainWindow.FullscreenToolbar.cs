@@ -20,7 +20,7 @@ public partial class MainWindow
             _fullscreenToolbar.SaveFrameRequested += async (_, _) => await SaveFrameAsync();
             _fullscreenToolbar.CopyRecordingRequested += async (_, _) => await CopyRecordingAsync();
             _fullscreenToolbar.ExitRequested += (_, _) => SetFullscreen(false);
-            _fullscreenToolbar.FitRequested += (_, _) => PictureFit.SelectedIndex = PictureFit.SelectedIndex == 1 ? 0 : 1;
+            _fullscreenToolbar.FitRequested += (_, _) => PictureFit.SelectedIndex = (PictureFit.SelectedIndex + 1) % 3;
             _fullscreenToolbar.CecRequested += (_, _) => Cec_Click(this, new RoutedEventArgs());
             _fullscreenToolbar.CopyTextRequested += async (_, _) => await CopyVideoTextAsync();
             _fullscreenToolbar.ScreenTextRequested += async (_, _) => await CopyScreenTextAsync();
@@ -67,7 +67,15 @@ public partial class MainWindow
 
     private void UpdateFullscreenToolbar()
     {
-        _fullscreenToolbar?.SetFillMode(PictureFit.SelectedIndex == 1);
+        // Clip exports can complete after native playback has been disposed during shutdown.
+        if (_closing) return;
+        Controls.ButtonState.SetIsActive(BrowserButton, _browser?.IsVisible == true);
+        Controls.ButtonState.SetIsActive(FullscreenButton, _fullscreen);
+        Controls.ButtonState.SetIsActive(PauseButton, _session?.Player.IsPlaying == true);
+        Controls.ButtonState.SetIsActive(RecordButton, IsVideoRecording);
+        _fullscreenToolbar?.SetFullscreenActive(_fullscreen);
+        _fullscreenToolbar?.SetBrowserVisible(_browser?.IsVisible == true);
+        _fullscreenToolbar?.SetPictureMode(PictureFit.SelectedIndex);
         _fullscreenToolbar?.SetSpeechEnabled(SpeechEnabled.IsChecked == true);
         _fullscreenToolbar?.SetLevels(MenuOpacity.Value, Volume.Value, SpeechVolume.Value);
         var media = _session is { HasMedia: true } active ? active : null;

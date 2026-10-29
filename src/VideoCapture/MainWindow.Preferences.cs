@@ -78,7 +78,7 @@ public partial class MainWindow
             VideoDevice = _selectedVideoName,
             AudioDevice = _selectedAudioName,
             SoftwarePreview = PreviewRenderer.SelectedIndex == 1,
-            PictureFit = _fullscreen ? _windowedPictureFit : PictureFit.SelectedIndex,
+            PictureFit = PictureFit.SelectedIndex,
             Volume = Volume.Value,
             MonitorCaptureAudio = MonitorCaptureAudio.IsChecked == true,
             BrowserTabs = _browser?.SessionReady == true ? _browser.SessionTabs : _preferences.BrowserTabs,
