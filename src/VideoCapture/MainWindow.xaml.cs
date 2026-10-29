@@ -33,12 +33,11 @@ public partial class MainWindow : Window
     private long _displayedFrame;
     private PlaybackSession? _session;
     private Task<PlaybackSession>? _sessionCreation;
-    private bool _busy, _closing, _updatingSeek, _draggingSeek, _fullscreen;
+    private bool _busy, _closing, _updatingSeek, _draggingSeek, _fullscreen, _pictureModePending;
     private WindowState _previousState;
     private Rect _windowedBounds;
     private double _windowedMinWidth, _windowedMinHeight;
     private ResizeMode _windowedResizeMode;
-    private int _windowedPictureFit;
 
     public MainWindow() : this(new PreferencesStore(), new PlaybackHistoryStore()) { }
 
@@ -146,20 +145,31 @@ public partial class MainWindow : Window
     private void PictureFit_Changed(object sender, SelectionChangedEventArgs e)
     {
         QueuePreferencesSave();
-        if (VideoScale is not null) VideoScale.Stretch = PictureFit.SelectedIndex == 1 ? Stretch.UniformToFill : Stretch.Uniform;
+        _pictureModePending = true;
+        if (VideoScale is not null) VideoScale.Stretch = PictureFit.SelectedIndex switch { 1 => Stretch.UniformToFill, 2 => Stretch.Fill, _ => Stretch.Uniform };
+        if (_preferencesLoaded) UpdateFullscreenToolbar();
         ApplyGpuFit();
     }
 
     private void Video_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyGpuFit();
     private void ApplyGpuFit()
     {
-        if (_session is not { UsesSoftwarePreview: false } session || _busy) return;
+        if (_session is { UsesSoftwarePreview: true }) { _pictureModePending = false; return; }
+        if (_session is not { UsesSoftwarePreview: false } session || _busy || _closing) return;
         session.Player.Scale = 0;
         var source = _videoInfo ?? session.GetVideoInfo();
-        if (session.IsLive && source is not null)
-            session.Player.AspectRatio = source.IsTransposed ? $"{source.Height}:{source.Width}" : $"{source.Width}:{source.Height}";
+        if (PictureFit.SelectedIndex == 2 && GpuVideo.ActualWidth > 0 && GpuVideo.ActualHeight > 0)
+        {
+            var size = new Vector(GpuVideo.ActualWidth, GpuVideo.ActualHeight);
+            var transform = PresentationSource.FromVisual(GpuVideo)?.CompositionTarget?.TransformToDevice;
+            if (transform is { } matrix) size = matrix.Transform(size);
+            session.Player.AspectRatio = FormattableString.Invariant($"{Math.Max(1, (int)Math.Round(size.X))}:{Math.Max(1, (int)Math.Round(size.Y))}");
+        }
+        else session.Player.AspectRatio = session.IsLive && source is not null
+            ? source.IsTransposed ? $"{source.Height}:{source.Width}" : $"{source.Width}:{source.Height}" : null;
         session.Player.CropGeometry = PictureFit.SelectedIndex == 1 && source is not null && VideoBorder.ActualWidth > 0 && VideoBorder.ActualHeight > 0
             ? VideoLayout.CenterCrop(source, VideoBorder.ActualWidth, VideoBorder.ActualHeight).BorderGeometry(source) : "";
+        _pictureModePending = false;
     }
 
     private async Task RunAsync(Func<Task> action, bool showError = true)
@@ -323,6 +333,7 @@ public partial class MainWindow : Window
         CopyTextButton.IsEnabled = ready && CanCaptureFrame;
         ScreenTextButton.IsEnabled = !_busy && !_closing;
         UpdatePlaylistControls();
+        if (ready && _pictureModePending) ApplyGpuFit();
         UpdateFullscreenToolbar();
     }
 
@@ -504,7 +515,6 @@ public partial class MainWindow : Window
             _windowedMinWidth = MinWidth;
             _windowedMinHeight = MinHeight;
             _windowedResizeMode = ResizeMode;
-            _windowedPictureFit = PictureFit.SelectedIndex;
         }
         _fullscreen = enabled;
         HeaderPanel.Visibility = DevicePanel.Visibility = PlaybackControls.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
@@ -521,7 +531,6 @@ public partial class MainWindow : Window
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             MinWidth = MinHeight = 0;
-            PictureFit.SelectedIndex = 1;
             FullscreenDisplay.CoverMonitor(this, monitor);
         }
         else
@@ -535,7 +544,6 @@ public partial class MainWindow : Window
             Width = _windowedBounds.Width;
             Height = _windowedBounds.Height;
             WindowState = _previousState;
-            PictureFit.SelectedIndex = _windowedPictureFit;
         }
         if (enabled) Dispatcher.BeginInvoke(() =>
         {

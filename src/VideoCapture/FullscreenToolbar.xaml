@@ -26,7 +26,7 @@
     <Button x:Name="ScreenTextButton" Content="&#xE7C4;" Style="{StaticResource IconButton}" Click="ScreenText_Click" ToolTip="Select screen text (Ctrl+Shift+X)" AutomationProperties.Name="Screen text"/>
     <Button x:Name="SaveFrameButton" Content="&#xE74E;" Style="{StaticResource IconButton}" Click="SaveFrame_Click" ToolTip="Save frame" AutomationProperties.Name="Save frame"/>
     <Button x:Name="CopyRecordingButton" Content="&#xE8C8;" Style="{StaticResource IconButton}" Click="CopyRecording_Click" ToolTip="Copy last recording file" AutomationProperties.Name="Copy recording"/>
-    <Button x:Name="FitButton" Content="&#xE9A6;" Style="{StaticResource IconButton}" Click="Fit_Click" ToolTip="Show whole frame" AutomationProperties.Name="Picture fit"/>
+    <Button x:Name="FitButton" Content="Regular" Click="Fit_Click" ToolTip="Show whole frame" AutomationProperties.Name="Picture fit"/>
     <Button x:Name="SpeechButton" Content="Read aloud" Click="Speech_Click" ToolTip="Toggle subtitle speech"/>
     <Button x:Name="ProgressButton" Content="Timeline" Click="Progress_Click" ToolTip="Hide video progress"/>
     <Button x:Name="BrowserButton" Content="&#xE774;" Style="{StaticResource IconButton}" Click="Browser_Click" ToolTip="Floating browser" AutomationProperties.Name="Browser"/>

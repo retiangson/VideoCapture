@@ -75,13 +75,14 @@ final class Ui {
   }
 
   static void active(Button button, boolean on) {
+    active(button, on, on ? "On" : "Off");
+  }
+
+  static void active(Button button, boolean on, String state) {
     if (button == null) return;
     button.setSelected(on);
-    String state = on ? "On" : "Off";
-    if (!state.contentEquals(
-        androidx.core.view.ViewCompat.getStateDescription(button) == null
-            ? ""
-            : androidx.core.view.ViewCompat.getStateDescription(button)))
+    CharSequence previous = androidx.core.view.ViewCompat.getStateDescription(button);
+    if (!state.contentEquals(previous == null ? "" : previous))
       androidx.core.view.ViewCompat.setStateDescription(button, state);
   }
 

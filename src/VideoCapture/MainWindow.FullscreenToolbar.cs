@@ -20,7 +20,7 @@ public partial class MainWindow
             _fullscreenToolbar.SaveFrameRequested += async (_, _) => await SaveFrameAsync();
             _fullscreenToolbar.CopyRecordingRequested += async (_, _) => await CopyRecordingAsync();
             _fullscreenToolbar.ExitRequested += (_, _) => SetFullscreen(false);
-            _fullscreenToolbar.FitRequested += (_, _) => PictureFit.SelectedIndex = PictureFit.SelectedIndex == 1 ? 0 : 1;
+            _fullscreenToolbar.FitRequested += (_, _) => PictureFit.SelectedIndex = (PictureFit.SelectedIndex + 1) % 3;
             _fullscreenToolbar.CecRequested += (_, _) => Cec_Click(this, new RoutedEventArgs());
             _fullscreenToolbar.CopyTextRequested += async (_, _) => await CopyVideoTextAsync();
             _fullscreenToolbar.ScreenTextRequested += async (_, _) => await CopyScreenTextAsync();
@@ -75,7 +75,7 @@ public partial class MainWindow
         Controls.ButtonState.SetIsActive(RecordButton, IsVideoRecording);
         _fullscreenToolbar?.SetFullscreenActive(_fullscreen);
         _fullscreenToolbar?.SetBrowserVisible(_browser?.IsVisible == true);
-        _fullscreenToolbar?.SetFillMode(PictureFit.SelectedIndex == 1);
+        _fullscreenToolbar?.SetPictureMode(PictureFit.SelectedIndex);
         _fullscreenToolbar?.SetSpeechEnabled(SpeechEnabled.IsChecked == true);
         _fullscreenToolbar?.SetLevels(MenuOpacity.Value, Volume.Value, SpeechVolume.Value);
         var media = _session is { HasMedia: true } active ? active : null;

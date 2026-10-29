@@ -56,7 +56,12 @@ public final class MainActivity extends ComponentActivity {
   private EditText transcript;
   private SeekBar seek;
   private ProgressBar levelMeter;
-  private Button playButton, recordButton, audioStart, fullscreenButton, hideMenuButton;
+  private Button playButton,
+      recordButton,
+      audioStart,
+      fullscreenButton,
+      hideMenuButton,
+      pictureModeButton;
   private Spinner audioSource;
   private ExoPlayer player;
   private PlayerStore store;
@@ -228,10 +233,7 @@ public final class MainActivity extends ComponentActivity {
     videoLayer = new FrameLayout(this);
     root.addView(videoLayer, new FrameLayout.LayoutParams(-1, -1));
     playerView = (PlayerView) getLayoutInflater().inflate(R.layout.player, videoLayer, false);
-    playerView.setResizeMode(
-        Boolean.parseBoolean(store.text("fill", "false"))
-            ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    playerView.setResizeMode(PictureMode.read(store).resizeMode);
     videoLayer.addView(playerView);
     usbView = new TextureView(this);
     videoLayer.addView(usbView, new FrameLayout.LayoutParams(-1, -1));
@@ -261,7 +263,8 @@ public final class MainActivity extends ComponentActivity {
         });
     gesturesView = new View(this);
     gesturesView.setContentDescription(
-        "Video gestures: hold to show controls, tap to hide, two-finger tap for browser");
+        "Video gestures: double-tap for fullscreen, hold to show controls, tap to hide, two-finger"
+            + " tap for browser");
     videoLayer.addView(gesturesView, new FrameLayout.LayoutParams(-1, -1));
     videoGestures =
         new VideoGestures(
@@ -283,6 +286,10 @@ public final class MainActivity extends ComponentActivity {
 
               public void toggleBrowser() {
                 toggleBrowserPanel();
+              }
+
+              public void toggleFullscreen() {
+                setFullscreen(!fullscreen);
               }
             });
     status = Ui.text(this, "VIDEOCAPTURE  ·  Select USB or open a video to begin", 12, 0xff91a0b7);
@@ -385,11 +392,9 @@ public final class MainActivity extends ComponentActivity {
     more.addView(Ui.button(this, "Mode / FPS", this::chooseMode));
     more.addView(Ui.button(this, "Audio input", this::chooseAudio));
     more.addView(Ui.button(this, "Audio track", this::chooseFileAudio));
-    addToggle(
-        more,
-        "Fill screen",
-        () -> playerView.getResizeMode() == AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-        this::toggleFit);
+    pictureModeButton =
+        Ui.button(this, "Picture: " + PictureMode.read(store).label, this::choosePictureMode);
+    more.addView(pictureModeButton);
     addToggle(
         more,
         "Browser",
@@ -486,6 +491,12 @@ public final class MainActivity extends ComponentActivity {
   private void updateToggleStates() {
     for (Map.Entry<Button, java.util.function.BooleanSupplier> entry : toggleStates.entrySet())
       Ui.active(entry.getKey(), entry.getValue().getAsBoolean());
+    if (pictureModeButton != null) {
+      PictureMode mode = PictureMode.read(store);
+      String label = "Picture: " + mode.label;
+      if (!label.contentEquals(pictureModeButton.getText())) pictureModeButton.setText(label);
+      Ui.active(pictureModeButton, mode != PictureMode.REGULAR, mode.label);
+    }
     Ui.active(fullscreenButton, fullscreen);
     Ui.active(playButton, player != null && !live && player.isPlaying());
     boolean recording = recorder != null || pendingLocalClip != null;
@@ -511,7 +522,7 @@ public final class MainActivity extends ComponentActivity {
     int width = root.getWidth() - root.getPaddingLeft() - root.getPaddingRight();
     int height = root.getHeight() - root.getPaddingTop() - root.getPaddingBottom();
     if (width <= 0 || height <= 0) return;
-    int top = status.getHeight() + dp(8);
+    int top = (status.getVisibility() == View.VISIBLE ? status.getHeight() : 0) + dp(8);
     controls.heightLimit(Math.max(dp(52), height - top - dp(26) - dp(64)));
     int reserved = menu.getVisibility() == View.VISIBLE ? menu.getHeight() + dp(26) : dp(8);
     FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) sourceChooser.getLayoutParams();
@@ -552,6 +563,7 @@ public final class MainActivity extends ComponentActivity {
 
   private void setFullscreen(boolean value) {
     fullscreen = value;
+    updateStatusVisibility();
     menu.setVisibility(value ? View.GONE : View.VISIBLE);
     hideMenuButton.setVisibility(value ? View.VISIBLE : View.GONE);
     fullscreenButton.setText(value ? "Exit fullscreen" : "Fullscreen");
@@ -569,8 +581,18 @@ public final class MainActivity extends ComponentActivity {
   private void message(String value) {
     main.post(
         () -> {
-          if (!closed) status.setText(value);
+          if (!closed) {
+            status.setText(value);
+            updateStatusVisibility();
+          }
         });
+  }
+
+  private void updateStatusVisibility() {
+    String caption = status.getText().toString();
+    boolean sourceCaption = caption.startsWith("LIVE") || caption.startsWith("LOCAL");
+    status.setVisibility(fullscreen && sourceCaption ? View.GONE : View.VISIBLE);
+    layoutSourceChooser();
   }
 
   private boolean sourceLocked() {
@@ -1018,25 +1040,37 @@ public final class MainActivity extends ComponentActivity {
     if (captureSize == null || videoLayer == null || usbView == null) return;
     int width = videoLayer.getWidth(), height = videoLayer.getHeight();
     if (width <= 0 || height <= 0) return;
-    float scale =
-        Boolean.parseBoolean(store.text("fill", "false"))
-            ? Math.max(width / (float) captureSize.width, height / (float) captureSize.height)
-            : Math.min(width / (float) captureSize.width, height / (float) captureSize.height);
-    FrameLayout.LayoutParams p =
-        new FrameLayout.LayoutParams(
-            Math.round(captureSize.width * scale),
-            Math.round(captureSize.height * scale),
-            Gravity.CENTER);
+    int[] size =
+        PictureMode.read(store).dimensions(captureSize.width, captureSize.height, width, height);
+    FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(size[0], size[1], Gravity.CENTER);
     if (usbView.getLayoutParams().width != p.width || usbView.getLayoutParams().height != p.height)
       usbView.setLayoutParams(p);
   }
 
-  private void toggleFit() {
-    boolean fill = playerView.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_ZOOM;
-    store.put("fill", Boolean.toString(fill));
-    playerView.setResizeMode(
-        fill ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+  private void choosePictureMode() {
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("Picture mode")
+        .setSingleChoiceItems(
+            new String[] {
+              "Regular · whole picture",
+              "Fill · crop edges",
+              "Stretch · fill without preserving proportions"
+            },
+            PictureMode.read(store).ordinal(),
+            (dialog, which) -> {
+              setPictureMode(PictureMode.values()[which]);
+              dialog.dismiss();
+            })
+        .setNegativeButton("Cancel", null)
+        .show();
+  }
+
+  private void setPictureMode(PictureMode mode) {
+    store.put("pictureMode", mode.name());
+    store.put("fill", Boolean.toString(mode == PictureMode.FILL));
+    playerView.setResizeMode(mode.resizeMode);
     fitCapture();
+    updateToggleStates();
   }
 
   private void chooseAudio() {

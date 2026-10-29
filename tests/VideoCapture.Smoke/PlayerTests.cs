@@ -41,7 +41,13 @@ internal static class PlayerTests
             if (window.FloatingToolbar?.IsVisible == true) throw new Exception("Menu must start hidden.");
             window.ToggleFullscreenToolbar();
             var toolbar = window.FloatingToolbar!;
-            if (!ButtonState.GetIsActive((Button)toolbar.FindName("FitButton")) || !ButtonState.GetIsActive((Button)toolbar.FindName("ExitButton"))) throw new Exception("Fullscreen/fill state must reflect keyboard entry.");
+            if (ButtonState.GetIsActive((Button)toolbar.FindName("FitButton")) || !ButtonState.GetIsActive((Button)toolbar.FindName("ExitButton"))) throw new Exception("Fullscreen must preserve the default Regular picture mode.");
+            var picture=(ComboBox)window.FindName("PictureFit");
+            var mode=(Button)toolbar.FindName("FitButton");
+            for(int expected=1;expected<=3;expected++) {
+                mode.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if(picture.SelectedIndex!=expected%3) throw new Exception("Picture modes must cycle Regular, Fill, Stretch.");
+            }
             var timeline=(Button)toolbar.FindName("ProgressButton");
             timeline.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             if (ButtonState.GetIsActive(timeline) != toolbar.ProgressVisible) throw new Exception("Timeline state is not synchronized.");
@@ -53,8 +59,18 @@ internal static class PlayerTests
             CheckPointSelection((Slider)toolbar.FindName("MenuVolume"), 0.3);
             if (Math.Abs(volume.Value - 30) > 1) throw new Exception("Menu volume must synchronize with player volume.");
             SendKey(window, Key.Escape);
-            await window.OpenFileAsync(input);
+            var loading = window.OpenFileAsync(input);
+            picture.SelectedIndex=2;
+            await loading;
             await WaitAsync(() => window.PresentedFrameCount >= 3, "first playlist video");
+            var native=((LibVLCSharp.WPF.VideoView)window.FindName("GpuVideo")).MediaPlayer!;
+            picture.SelectedIndex=2;
+            await WaitAsync(() => !string.IsNullOrWhiteSpace(native.AspectRatio) && string.IsNullOrEmpty(native.CropGeometry), "GPU stretch geometry");
+            picture.SelectedIndex=0;
+            await WaitAsync(() => string.IsNullOrWhiteSpace(native.AspectRatio) && string.IsNullOrEmpty(native.CropGeometry), "GPU Regular reset");
+            picture.SelectedIndex=2;
+            SendKey(window,Key.F11); SendKey(window,Key.Escape);
+            if(picture.SelectedIndex!=2) throw new Exception("Fullscreen must preserve Stretch.");
             var play=(Button)window.FindName("PauseButton");
             await WaitAsync(() => ButtonState.GetIsActive(play), "playing highlight");
             play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -77,6 +93,7 @@ internal static class PlayerTests
             var reopened = new MainWindow(settings, new MemoryPlaybackHistoryStore());
             reopened.Show();
             await WaitAsync(() => ((Button)reopened.FindName("OpenButton")).IsEnabled && reopened.Playlist.Items.Count == 3, "playlist reopen");
+            if (((ComboBox)reopened.FindName("PictureFit")).SelectedIndex!=2) throw new Exception("Stretch preference did not survive reopening.");
             if (reopened.Playlist.Current is not null || ((Button)reopened.FindName("StopButton")).IsEnabled)
                 throw new Exception("Restoring playlist must not automatically play a movie.");
             if (!((Button)reopened.FindName("PauseButton")).IsEnabled) throw new Exception("Play must be available for the restored selected video.");

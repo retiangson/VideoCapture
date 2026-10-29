@@ -127,6 +127,43 @@ public final class AndroidParityTests {
     }
   }
 
+  @Test
+  public void doubleTapTogglesFullscreenAndHidesLiveCaption() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      AtomicReference<View> target = new AtomicReference<>();
+      scenario.onActivity(
+          a -> {
+            target.set((View) field(a, "gesturesView"));
+            try {
+              Method m = a.getClass().getDeclaredMethod("message", String.class);
+              m.setAccessible(true);
+              m.invoke(a, "LIVE · test capture");
+            } catch (Exception error) {
+              throw new AssertionError(error);
+            }
+          });
+      int[] at = new int[2];
+      InstrumentationRegistry.getInstrumentation()
+          .runOnMainSync(() -> target.get().getLocationOnScreen(at));
+      for (boolean expected : new boolean[] {true, false}) {
+        for (int tap = 0; tap < 2; tap++) {
+          long down = SystemClock.uptimeMillis();
+          pointer(down, down, MotionEvent.ACTION_DOWN, at[0] + 400, at[1] + 200);
+          pointer(
+              down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, at[0] + 400, at[1] + 200);
+          SystemClock.sleep(80);
+        }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        scenario.onActivity(
+            a -> {
+              assertEquals(expected, field(a, "fullscreen"));
+              assertEquals(
+                  expected ? View.GONE : View.VISIBLE, ((View) field(a, "status")).getVisibility());
+            });
+      }
+    }
+  }
+
   private static void pointer(long down, long now, int action, float x, float y) {
     MotionEvent.PointerProperties property = new MotionEvent.PointerProperties();
     property.id = 0;

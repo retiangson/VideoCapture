@@ -66,7 +66,15 @@ public partial class FullscreenToolbar : Window
     }
 
     public void SetFeedback(string message) => Feedback.Text = message;
-    public void SetFillMode(bool fill) { FitButton.ToolTip = fill ? "Fill on · show whole frame" : "Fill off · fill screen"; ButtonState.SetIsActive(FitButton, fill); }
+    public void SetFillMode(bool fill) => SetPictureMode(fill ? 1 : 0);
+    public void SetPictureMode(int mode)
+    {
+        string label = mode switch { 1 => "Fill", 2 => "Stretch", _ => "Regular" };
+        FitButton.Content = label;
+        FitButton.ToolTip = $"Picture: {label} · click to cycle Regular, Fill, Stretch";
+        ButtonState.SetIsActive(FitButton, mode != 0);
+        System.Windows.Automation.AutomationProperties.SetItemStatus(FitButton, label);
+    }
     public void SetTransport(bool canPlay, bool playing, bool canStop, bool canPrevious, bool canNext)
     {
         ButtonState.SetIsActive(PlayButton, playing);

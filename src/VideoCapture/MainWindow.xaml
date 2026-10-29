@@ -50,7 +50,7 @@
        <TextBlock x:Name="RecordingTime" FontSize="20" Foreground="#FF91AC"/>
        <Border Height="1" Background="#29364B" Margin="0,0,0,14"/>
        <TextBlock Text="PICTURE &amp; TOOLS" Foreground="#5CE0C1" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
-       <TextBlock Text="Picture fit" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PictureFit" SelectedIndex="0" SelectionChanged="PictureFit_Changed"><ComboBoxItem Content="Fit · whole picture"/><ComboBoxItem Content="Fill · crop edges"/></ComboBox>
+       <TextBlock Text="Picture fit" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PictureFit" SelectedIndex="0" SelectionChanged="PictureFit_Changed"><ComboBoxItem Content="Regular · whole picture"/><ComboBoxItem Content="Fill · crop edges"/><ComboBoxItem Content="Stretch · change proportions"/></ComboBox>
        <TextBlock Text="Renderer · stop to change" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PreviewRenderer" SelectedIndex="0" SelectionChanged="PreviewRenderer_Changed"><ComboBoxItem Content="GPU · fastest"/><ComboBoxItem Content="Compatibility · CPU"/></ComboBox>
        <DockPanel><TextBlock Text="Menu opacity" Style="{StaticResource FieldLabel}"/><TextBlock Text="{Binding Value, ElementName=MenuOpacity, StringFormat={}{0:P0}}" Foreground="#E8EEF7" HorizontalAlignment="Right"/></DockPanel>
        <Slider x:Name="MenuOpacity" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" Margin="0,0,0,12" ToolTip="Opacity of the entire fullscreen menu"/>

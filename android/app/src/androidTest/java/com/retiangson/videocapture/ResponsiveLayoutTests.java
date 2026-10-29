@@ -162,19 +162,26 @@ public final class ResponsiveLayoutTests {
       scenario.onActivity(
           a -> {
             View menu = (View) field(a, "menu");
-            Button fill = button(menu, "Fill screen"),
+            Button fill = (Button) field(a, "pictureModeButton"),
                 timeline = button(menu, "Timeline"),
                 reading = button(menu, "Read subtitles");
             assertTrue(fill.isSelected());
             assertFalse(timeline.isSelected());
             assertTrue(reading.isSelected());
-            fill.performClick();
+            try {
+              java.lang.reflect.Method mode =
+                  a.getClass().getDeclaredMethod("setPictureMode", PictureMode.class);
+              mode.setAccessible(true);
+              mode.invoke(a, PictureMode.REGULAR);
+            } catch (Exception error) {
+              throw new AssertionError(error);
+            }
             timeline.performClick();
             reading.performClick();
             assertFalse(fill.isSelected());
             assertTrue(timeline.isSelected());
             assertFalse(reading.isSelected());
-            assertEquals("Off", androidx.core.view.ViewCompat.getStateDescription(fill));
+            assertEquals("Regular", androidx.core.view.ViewCompat.getStateDescription(fill));
             fill.setEnabled(false);
             assertEquals(.35f, fill.getAlpha(), .01f);
             fill.setEnabled(true);
@@ -208,10 +215,53 @@ public final class ResponsiveLayoutTests {
       scenario.onActivity(
           a -> {
             View menu = (View) field(a, "menu");
-            assertFalse(button(menu, "Fill screen").isSelected());
+            assertFalse(((Button) field(a, "pictureModeButton")).isSelected());
             assertTrue(button(menu, "Timeline").isSelected());
             assertFalse(button(menu, "Read subtitles").isSelected());
           });
+    }
+  }
+
+  @Test
+  public void stretchAndPictureChoiceSurviveFullscreenAndRecreation() throws Exception {
+    Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+    assertEquals(PictureMode.REGULAR, PictureMode.read(new PlayerStore(context)));
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      scenario.onActivity(
+          a -> {
+            for (PictureMode mode : PictureMode.values()) {
+              try {
+                java.lang.reflect.Method setter =
+                    a.getClass().getDeclaredMethod("setPictureMode", PictureMode.class);
+                setter.setAccessible(true);
+                setter.invoke(a, mode);
+              } catch (Exception error) {
+                throw new AssertionError(error);
+              }
+              assertEquals(
+                  mode.resizeMode,
+                  ((androidx.media3.ui.PlayerView) field(a, "playerView")).getResizeMode());
+              assertEquals(
+                  "Picture: " + mode.label,
+                  ((Button) field(a, "pictureModeButton")).getText().toString());
+              ((Button) field(a, "fullscreenButton")).performClick();
+              ((Button) field(a, "fullscreenButton")).performClick();
+              assertEquals(mode, PictureMode.read(new PlayerStore(context)));
+            }
+            assertArrayEquals(
+                new int[] {1200, 675}, PictureMode.REGULAR.dimensions(1920, 1080, 1200, 800));
+            assertArrayEquals(
+                new int[] {1422, 800}, PictureMode.FILL.dimensions(1920, 1080, 1200, 800));
+            assertArrayEquals(
+                new int[] {1200, 800}, PictureMode.STRETCH.dimensions(1920, 1080, 1200, 800));
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a ->
+              assertEquals(
+                  androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
+                  ((androidx.media3.ui.PlayerView) field(a, "playerView")).getResizeMode()));
     }
   }
 
