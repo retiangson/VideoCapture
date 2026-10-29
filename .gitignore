@@ -12,3 +12,9 @@ artifacts/
 /src/VideoCapture/Tools/Media/*.exe
 
 /src/VideoCapture/Models/*.bin
+
+/android/.gradle/
+/android/**/build/
+/android/**/.cxx/
+/android/local.properties
+/android/vendor/

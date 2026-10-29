@@ -1,0 +1,22 @@
+VideoCapture Android preview — third-party notices
+
+UVCAndroid 1.0.13: Copyright upstream contributors, Apache-2.0.
+Source and unmodified library build project: https://github.com/shiyinghan/UVCAndroid/tree/1.0.13
+Includes UVCCamera native code, libusb (LGPL-2.1-or-later), libuvc (BSD), libjpeg-turbo (IJG/BSD/zlib), libyuv (BSD), and RapidJSON (MIT). Corresponding native source and build scripts are in that pinned upstream tree under libuvccamera/src/main/jni; no modifications to these libraries were made for this app. Library license texts are included as LICENSE.* assets. This software is based in part on the work of the Independent JPEG Group.
+
+AndroidX Activity 1.11.0, Core 1.17.0, Media3 1.11.1: Apache-2.0, Android Open Source Project contributors.
+Sources: https://android.googlesource.com/platform/frameworks/support/ and https://github.com/androidx/media
+
+Google ML Kit Text Recognition 16.0.1: Google SDK terms and third-party notices.
+https://developers.google.com/ml-kit/terms
+https://developers.google.com/ml-kit/vision/text-recognition/v2/android
+
+whisper.cpp v1.9.5 (d1be6fde11ac6e0407606b4e42fe72d34add8037): MIT, Georgi Gerganov and contributors.
+https://github.com/ggml-org/whisper.cpp/tree/d1be6fde11ac6e0407606b4e42fe72d34add8037
+Whisper model: MIT, OpenAI. Source/checksum details: SOURCE.txt asset and tools/Setup-SpeechModel.ps1 in the VideoCapture source repository.
+Model files: LICENSE.Whisper.txt, LICENSE.WhisperCpp.txt.
+
+Android System WebView, Android codecs and text-to-speech engines are installed OS components with their own licenses; not bundled here.
+
+Full application source and build instructions: https://github.com/retiangson/VideoCapture/tree/feature/android
+The application does not restrict modification/rebuilding of the native library dependency. Preview signing uses the local Android debug key; signing with your own key requires installing your own build.

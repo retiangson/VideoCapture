@@ -2,3 +2,7 @@
 *.png binary
 *.ico binary
 *.traineddata binary
+
+# Preserve executable Unix wrapper line endings on Windows checkouts.
+android/gradlew text eol=lf
+android/gradlew.bat text eol=crlf

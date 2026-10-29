@@ -1,0 +1,55 @@
+# VideoCapture for Android (preview)
+
+Native Java/Android Views app with Media3 hardware playback, UVC USB capture, an in-app Chromium WebView browser, bundled OCR, and local whisper.cpp transcription. This is an independent Android target; Windows remains in `src/VideoCapture`.
+
+**This preview does not yet have full Windows feature parity.** See [PARITY.md](PARITY.md) for implemented behavior, test evidence, and remaining work. The intended physical target is the Samsung Galaxy Tab S8+ with a USB-C/OTG capture card. Physical USB functionality and performance must be validated on that tablet.
+
+## Build
+
+Requirements: JDK 17+ (tested with Android Studio JBR 21), Android SDK platform 36, Build Tools 36.0.0 or compatible AGP-selected version, NDK `27.2.12479018`, CMake `3.22.1`. Minimum Android 10/API 29. Target API 36. ABIs: ARM64 (tablet) and x86_64 (emulator). Gradle 8.14.3 and AGP 8.13.2 are pinned; the wrapper distribution has a SHA-256 checksum.
+
+From the repository root in PowerShell:
+
+```powershell
+./tools/Setup-Android.ps1
+# Set ANDROID_HOME to your Android SDK, or create android/local.properties with sdk.dir.
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+./android/gradlew.bat -p android assemblePreview lintDebug
+```
+
+Setup downloads and verifies the pinned Whisper source and the same pinned 190,085,487-byte speech model used by Windows. Source/model are ignored by Git. Building needs internet for these assets and Gradle/Maven dependencies on the first build. The installed app does not download its OCR or transcription model.
+
+Installable output: `android/app/build/outputs/apk/preview/app-preview.apk`.
+The minified/shrunk preview uses the local **debug signing key**, package `com.retiangson.videocapture.preview`, label **VideoCapture Preview**. It is a sideload preview, not a production release signing setup. Keep the same signing key for updates; different developer machines normally have different debug keys. `assembleRelease` creates an unsigned release until private release signing is configured. Do not commit signing keys or passwords.
+
+The APK contains both ABIs and the offline model (~218 MiB). First transcription copies the model into private storage (~181 MiB extra) and loads it on demand; playback startup does not initialize Whisper, OCR, TTS, or the browser. Small transcription models trade accuracy for speed; this preview uses multilingual Whisper small q5_1 and up to four CPU threads. Actual transcription speed depends on the tablet.
+
+## Use
+
+- Long press the video for 450 ms to show the player menu. Release keeps it visible; a quick tap on the video hides it. Two-finger quick tap toggles the browser. Gestures on browser content retain normal browser behavior.
+- **Open** selects local media through Android's file picker; **Playlist** manages saved entries. The app remembers position, volume, opacity, tabs, and USB choices. File positions checkpoint every five seconds and on pause. Cloud document providers may need their own network connection; copy media locally for offline use.
+- **USB** selects an attached capture card and immediately opens it after Android grants USB access. **Mode / FPS** show device-advertised modes; the 4K label alone does not establish capture output capability. **Audio input** must explicitly select the capture card's audio input. It never falls back to the room microphone for video audio.
+- **Fit / Fill** crops to fill the screen without stretching. Choose Fit to fit the entire picture; bars are expected when source/display aspect ratios differ.
+- **Frame** copies an image URI to the clipboard; Android paste targets must support images. Save writes to `Pictures/VideoCapture`. **Text** OCR copies plain text. All capture tools capture the source video only, excluding app controls and browser.
+- **Record** records USB source video with selected USB audio, or marks and exports a segment of a local file. Recordings save to `Movies/VideoCapture`. Export compatibility depends on Android codecs. Recording ends when the app leaves the foreground; keep the app open until saving finishes. Destroying the activity cancels an unfinished local clip export.
+- **Read subtitles** uses selected embedded text cues first (including supported MKV text tracks); bitmap cues and burned-in subtitles use OCR. Select a subtitle track if necessary. Offline speech requires an installed offline Android TTS voice. Video and reading volumes are independent.
+- **Audio to text** toggles the transcript panel. Select **Video audio** or **Microphone**, start capture, then stop and transcribe. Captures are limited to two minutes. Video audio uses the selected local audio track or the explicitly selected USB input. Mic capture mutes local playback/USB monitoring to avoid echo. Transcript text is editable/copyable; it is not uploaded or persisted to disk by the app.
+- The browser defaults to ChatGPT, saves tabs/selection and cookies, supports double-tap title to maximize/restore, and hides its address/navigation row until requested. Drag the title to move it. Opacity affects the whole panel. Mouse-wheel gestures over browser chrome or outside the page adjust opacity; page scrolling remains normal.
+- Browser microphone permission is restricted to the exact HTTPS ChatGPT origins and requires Android mic permission. Camera, arbitrary-origin mic access, downloads and file/content URL access are disabled. Embedded WebView login/service restrictions may apply. Browser usage requires internet; local playback, source capture, OCR and Whisper do not. Do not run app mic capture and browser mic capture simultaneously.
+
+Private settings/history and WebView cookies stay in app storage; uninstall/clear app data removes them. Backups are disabled. The app does not request all-files access. A failed gallery write retains the private export rather than deleting the only copy; retry/recovery UI is not yet implemented.
+
+## Validation
+
+Build both the app and instrumentation APK, install on a disposable emulator, enable airplane mode and disable Wi-Fi, then run:
+
+```powershell
+./android/gradlew.bat -p android assembleDebug assembleDebugAndroidTest lintDebug
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w -r -e requireOffline true com.retiangson.videocapture.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Use `adb -s SERIAL` with multiple devices. Instrumentation clears the **debug package's** preferences and uses synthetic media; run it on a disposable test profile. Require the final `OK (11 tests)`; `adb shell am instrument` may exit with code zero even when tests fail. Tests exercise native touchscreen gestures, real decoding/resume, browser restoration and exact-origin mic grant/deny, offline OCR/Whisper, selected audio extraction, embedded MKV text cues, local clip export, source-only EGL surface recording with PCM, and rejection of microphone fallback. A headless emulator can grant browser mic permission yet report no readable microphone; physical browser mic capture remains a tablet check.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependencies and source/license links.
