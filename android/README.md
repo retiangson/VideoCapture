@@ -36,6 +36,8 @@ This improves layouts; it does not add background recording or built-in camera c
 
 ## Use
 
+In the Android floating browser, **Copy frame** puts the source image on the clipboard. To attach it to a web page, tap that page's **Attach / Upload** button and select **Copied frame** in the app's chooser. **Choose files** opens Android's file picker and supports multiple files when the page requests them. The copied-frame choice appears only for compatible PNG/image uploads and only while that frame remains on the clipboard. Ordinary Android WebView image paste is not guaranteed; this uses the page's standard file-upload flow instead. Uploads require an explicit selection and are cancelled when their tab navigates, closes or changes. Windows clipboard behavior is unchanged.
+
 The app starts in normal mode with visible player controls and **Select USB** / **Open video** source buttons. No gesture is needed to find the device picker. Select USB to list capture devices; an empty list produces a visible dialog. A selected card still opens automatically after permission. Close other camera apps before using the capture card here.
 
 Choose **Fullscreen** or double-tap the video for immersive playback. Double-tap again or use Back to exit. Live/local source captions are hidden in fullscreen; error and action feedback remains visible. That hides the player menu; **Exit fullscreen** or Back restores normal mode and its visible controls. Quick taps do not hide the normal player controls.

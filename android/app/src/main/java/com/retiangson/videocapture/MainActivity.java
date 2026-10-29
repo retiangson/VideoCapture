@@ -104,10 +104,23 @@ public final class MainActivity extends ComponentActivity {
   private long lastOcr;
   private Consumer<Boolean> pendingPermission;
   private ActivityResultLauncher<String[]> files;
+  private ActivityResultLauncher<Intent> browserFiles;
+  private Consumer<Uri[]> browserFilesResult;
 
   @Override
   public void onCreate(Bundle state) {
     super.onCreate(state);
+    browserFiles =
+        registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+              Consumer<Uri[]> callback = browserFilesResult;
+              browserFilesResult = null;
+              if (callback != null)
+                callback.accept(
+                    android.webkit.WebChromeClient.FileChooserParams.parseResult(
+                        result.getResultCode(), result.getData()));
+            });
     store = new PlayerStore(this);
     videoVolume = store.level("videoVolume", .75f);
     reading = Boolean.parseBoolean(store.text("reading", "false"));
@@ -1583,7 +1596,8 @@ public final class MainActivity extends ComponentActivity {
                   () -> {
                     ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
                         .setPrimaryClip(ClipData.newUri(getContentResolver(), "Video frame", uri));
-                    message("Video frame copied. Browser and controls are excluded.");
+                    message(
+                        "Frame copied. In the browser, tap Attach / Upload, then Copied frame.");
                   });
             }
           } catch (Exception error) {
@@ -1759,6 +1773,20 @@ public final class MainActivity extends ComponentActivity {
               new BrowserOverlay.Host() {
                 public void stateChanged() {
                   updateToggleStates();
+                }
+
+                public boolean chooseFiles(Intent intent, Consumer<Uri[]> result) {
+                  if (closed || browserFilesResult != null) return false;
+                  browserFilesResult = result;
+                  try {
+                    browserFiles.launch(intent);
+                    return true;
+                  } catch (android.content.ActivityNotFoundException
+                      | SecurityException
+                      | IllegalStateException error) {
+                    browserFilesResult = null;
+                    return false;
+                  }
                 }
 
                 public void permission(Consumer<Boolean> result) {
@@ -2203,6 +2231,7 @@ public final class MainActivity extends ComponentActivity {
     main.removeCallbacks(tick);
     speech.close();
     if (browser != null) browser.destroy();
+    browserFilesResult = null;
     if (player != null) {
       playerView.setPlayer(null);
       player.release();

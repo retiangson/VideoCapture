@@ -1,6 +1,7 @@
 package com.retiangson.videocapture;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Message;
@@ -13,6 +14,10 @@ import java.util.function.Consumer;
 final class BrowserOverlay extends LinearLayout {
   interface Host {
     default void stateChanged() {}
+
+    default boolean chooseFiles(Intent intent, Consumer<Uri[]> result) {
+      return false;
+    }
 
     void permission(Consumer<Boolean> result);
 
@@ -31,6 +36,7 @@ final class BrowserOverlay extends LinearLayout {
   private final Activity activity;
   private final PlayerStore store;
   private final Host host;
+  private final BrowserAttachments attachments;
   private final LinearLayout tabs = Ui.row(getContext()), navigation = Ui.row(getContext());
   private final FrameLayout page;
   private final LinearLayout tools;
@@ -57,6 +63,7 @@ final class BrowserOverlay extends LinearLayout {
     this.activity = activity;
     this.store = store;
     this.host = host;
+    attachments = new BrowserAttachments(activity, host::chooseFiles, host::feedback);
     setOrientation(VERTICAL);
     setPadding(Ui.dp(activity, 8), Ui.dp(activity, 6), Ui.dp(activity, 8), Ui.dp(activity, 6));
     setBackground(Ui.panel(0xff18212c, Ui.dp(activity, 12)));
@@ -231,6 +238,11 @@ final class BrowserOverlay extends LinearLayout {
     view.setWebViewClient(
         new WebViewClient() {
           @Override
+          public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
+            attachments.cancelFor(v);
+          }
+
+          @Override
           public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
             if (!valid(request.getUrl().toString())) {
               host.feedback("Only HTTPS browser navigation is supported.");
@@ -248,6 +260,16 @@ final class BrowserOverlay extends LinearLayout {
         });
     view.setWebChromeClient(
         new WebChromeClient() {
+          @Override
+          public boolean onShowFileChooser(
+              WebView v, ValueCallback<Uri[]> result, FileChooserParams params) {
+            if (disposed || getVisibility() != VISIBLE || v != current()) {
+              result.onReceiveValue(null);
+              return true;
+            }
+            return attachments.open(v, result, params);
+          }
+
           @Override
           public void onReceivedTitle(WebView v, String text) {
             int i = views.indexOf(v);
@@ -329,6 +351,7 @@ final class BrowserOverlay extends LinearLayout {
   }
 
   private void select(int index) {
+    attachments.cancel();
     selected = index;
     for (int i = 0; i < views.size(); i++) views.get(i).setVisibility(i == index ? VISIBLE : GONE);
     if (current() != null) address.setText(current().getUrl());
@@ -359,6 +382,7 @@ final class BrowserOverlay extends LinearLayout {
   private void closeTab(int index) {
     if (index < 0 || index >= views.size()) return;
     WebView view = views.remove(index);
+    attachments.cancelFor(view);
     destinations.remove(view);
     titles.remove(index);
     page.removeView(view);
@@ -536,6 +560,7 @@ final class BrowserOverlay extends LinearLayout {
   void destroy() {
     save();
     disposed = true;
+    attachments.cancel();
     for (PermissionRequest request : requests)
       try {
         request.deny();
