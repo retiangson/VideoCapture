@@ -87,10 +87,14 @@ public final class AndroidParityTests {
       SystemClock.sleep(600);
       InstrumentationRegistry.getInstrumentation().waitForIdleSync();
       scenario.onActivity(
-          a -> assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility()));
+          a -> {
+            BrowserOverlay browser = (BrowserOverlay) field(a, "browser");
+            assertNotNull(browser);
+            assertEquals(View.VISIBLE, browser.getVisibility());
+            assertEquals(View.GONE, ((View) field(a, "menu")).getVisibility());
+            browser.toggle();
+          });
       pointer(time, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y);
-      scenario.onActivity(
-          a -> assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility()));
       time = SystemClock.uptimeMillis();
       pointer(time, time, MotionEvent.ACTION_DOWN, x, y);
       pointer(time, time + 60, MotionEvent.ACTION_UP, x, y);
@@ -128,41 +132,42 @@ public final class AndroidParityTests {
   }
 
   @Test
-  public void doubleTapTogglesFullscreenAndHidesLiveCaption() throws Exception {
+  public void doubleTapShowsMenuAndFullscreenUsesHeaderIcon() throws Exception {
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
       AtomicReference<View> target = new AtomicReference<>();
-      scenario.onActivity(
-          a -> {
-            target.set((View) field(a, "gesturesView"));
-            try {
-              Method m = a.getClass().getDeclaredMethod("message", String.class);
-              m.setAccessible(true);
-              m.invoke(a, "LIVE · test capture");
-            } catch (Exception error) {
-              throw new AssertionError(error);
-            }
-          });
+      scenario.onActivity(a -> target.set((View) field(a, "gesturesView")));
+      InstrumentationRegistry.getInstrumentation().waitForIdleSync();
       int[] at = new int[2];
       InstrumentationRegistry.getInstrumentation()
           .runOnMainSync(() -> target.get().getLocationOnScreen(at));
-      for (boolean expected : new boolean[] {true, false}) {
-        long gesture = SystemClock.uptimeMillis();
-        for (int tap = 0; tap < 2; tap++) {
-          // Explicit touch timestamps keep this an 80 ms double tap even if emulator rendering
-          // stalls.
-          long down = gesture + tap * 80;
-          pointer(down, down, MotionEvent.ACTION_DOWN, at[0] + 400, at[1] + 200);
-          pointer(down, down + 30, MotionEvent.ACTION_UP, at[0] + 400, at[1] + 200);
-          SystemClock.sleep(80);
-        }
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        scenario.onActivity(
-            a -> {
-              assertEquals(expected, field(a, "fullscreen"));
-              assertEquals(
-                  expected ? View.GONE : View.VISIBLE, ((View) field(a, "status")).getVisibility());
-            });
+      long down = SystemClock.uptimeMillis();
+      pointer(down, down, MotionEvent.ACTION_DOWN, at[0] + 50, at[1] + 150);
+      pointer(down, down + 30, MotionEvent.ACTION_UP, at[0] + 50, at[1] + 150);
+      scenario.onActivity(a -> assertEquals(View.GONE, ((View) field(a, "menu")).getVisibility()));
+      SystemClock.sleep(400);
+      long gesture = SystemClock.uptimeMillis();
+      for (int tap = 0; tap < 2; tap++) {
+        down = gesture + tap * 80;
+        pointer(down, down, MotionEvent.ACTION_DOWN, at[0] + 50, at[1] + 150);
+        pointer(down, down + 30, MotionEvent.ACTION_UP, at[0] + 50, at[1] + 150);
+        SystemClock.sleep(80);
       }
+      scenario.onActivity(
+          a -> {
+            assertEquals(View.VISIBLE, ((View) field(a, "menu")).getVisibility());
+            assertFalse((Boolean) field(a, "fullscreen"));
+            ((TextView) field(a, "status")).setText("LIVE · test capture");
+            Button full = (Button) field(a, "fullscreenButton");
+            Button lock = (Button) field(a, "rotationLockButton");
+            assertSame(full.getParent(), lock.getParent());
+            assertEquals("", full.getText().toString());
+            assertEquals("", lock.getText().toString());
+            full.performClick();
+            assertTrue((Boolean) field(a, "fullscreen"));
+            assertEquals(View.GONE, ((View) field(a, "status")).getVisibility());
+            full.performClick();
+            assertFalse((Boolean) field(a, "fullscreen"));
+          });
     }
   }
 
@@ -228,6 +233,123 @@ public final class AndroidParityTests {
             0);
     InstrumentationRegistry.getInstrumentation().sendPointerSync(e);
     e.recycle();
+  }
+
+  @Test
+  public void decodedVideoFrameCopiesOpaquePictureAndRejectsEmptyCapture() throws Exception {
+    AtomicReference<ClipData> previous = new AtomicReference<>();
+    try (ActivityScenario<MainActivity> empty = ActivityScenario.launch(MainActivity.class)) {
+      empty.onActivity(
+          a -> {
+            ClipboardManager clipboard = a.getSystemService(ClipboardManager.class);
+            previous.set(clipboard.getPrimaryClip());
+            clipboard.setPrimaryClip(ClipData.newPlainText("Guard", "keep clipboard"));
+            capture(a);
+            assertEquals("keep clipboard", clipboard.getPrimaryClip().getItemAt(0).getText());
+            assertFalse((Boolean) field(a, "frameBusy"));
+            Bitmap transparent = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888);
+            assertFalse(FrameCapture.hasPixels(transparent));
+            transparent.eraseColor(Color.BLACK);
+            assertTrue(
+                "A legitimate opaque black frame must remain capturable",
+                FrameCapture.hasPixels(transparent));
+            transparent.recycle();
+          });
+    }
+    File directory = new File(target().getCacheDir(), "frames");
+    directory.mkdirs();
+    File video = new File(directory, "frame-capture-source.mp4");
+    copyAsset("test-video.mp4", video);
+    Uri source = FileProvider.getUriForFile(target(), target().getPackageName() + ".files", video);
+    AtomicReference<Uri> copied = new AtomicReference<>();
+    try (ActivityScenario<MainActivity> scenario =
+        ActivityScenario.launch(
+            new Intent(target(), MainActivity.class)
+                .setData(source)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))) {
+      waitPlayer(scenario);
+      long deadline = SystemClock.uptimeMillis() + 10000;
+      AtomicBoolean ready = new AtomicBoolean();
+      while (!ready.get() && SystemClock.uptimeMillis() < deadline) {
+        scenario.onActivity(a -> ready.set((Boolean) field(a, "fileFrameReady")));
+        if (!ready.get()) SystemClock.sleep(80);
+      }
+      assertTrue("Decoder must render before capture is enabled", ready.get());
+      CountDownLatch gpuDone = new CountDownLatch(1);
+      AtomicReference<Bitmap> gpuImage = new AtomicReference<>();
+      scenario.onActivity(
+          a -> {
+            androidx.media3.ui.PlayerView view =
+                (androidx.media3.ui.PlayerView) field(a, "playerView");
+            FrameCapture.pixelCopy(
+                (android.view.TextureView) view.getVideoSurfaceView(),
+                640,
+                360,
+                new Handler(Looper.getMainLooper()),
+                image -> {
+                  gpuImage.set(image);
+                  gpuDone.countDown();
+                });
+          });
+      assertTrue("GPU readback callback timed out", gpuDone.await(10, TimeUnit.SECONDS));
+      assertNotNull("Source-surface GPU fallback must return a picture", gpuImage.get());
+      assertTrue(FrameCapture.hasPixels(gpuImage.get()));
+      gpuImage.get().recycle();
+      scenario.onActivity(a -> capture(a));
+      deadline = SystemClock.uptimeMillis() + 10000;
+      while (copied.get() == null && SystemClock.uptimeMillis() < deadline) {
+        scenario.onActivity(
+            a -> {
+              ClipData clip = a.getSystemService(ClipboardManager.class).getPrimaryClip();
+              if (clip != null && clip.getItemAt(0).getUri() != null)
+                copied.set(clip.getItemAt(0).getUri());
+            });
+        if (copied.get() == null) SystemClock.sleep(80);
+      }
+      assertNotNull("Actual decoded frame must reach the clipboard", copied.get());
+      assertTrue(GalleryFrames.isPublishedFrame(target(), copied.get()));
+      try (InputStream input = target().getContentResolver().openInputStream(copied.get())) {
+        Bitmap image = BitmapFactory.decodeStream(input);
+        assertNotNull(image);
+        try {
+          assertTrue(FrameCapture.hasPixels(image));
+          java.util.Set<Integer> colors = new java.util.HashSet<>();
+          for (int y = 1; y < 16; y++)
+            for (int x = 1; x < 16; x++)
+              colors.add(image.getPixel(x * image.getWidth() / 16, y * image.getHeight() / 16));
+          assertTrue(
+              "Decoded test video must contain a picture, not a flat blank", colors.size() > 4);
+          assertEquals(
+              255, Color.alpha(image.getPixel(image.getWidth() / 2, image.getHeight() / 2)));
+          try (OutputStream output =
+              new FileOutputStream(
+                  new File(target().getExternalFilesDir(null), "decoded-copied-frame.png"))) {
+            image.compress(Bitmap.CompressFormat.PNG, 100, output);
+          }
+        } finally {
+          image.recycle();
+        }
+      }
+    } finally {
+      if (copied.get() != null) target().getContentResolver().delete(copied.get(), null, null);
+      InstrumentationRegistry.getInstrumentation()
+          .runOnMainSync(
+              () -> {
+                ClipboardManager clipboard = target().getSystemService(ClipboardManager.class);
+                if (previous.get() == null) clipboard.clearPrimaryClip();
+                else clipboard.setPrimaryClip(previous.get());
+              });
+    }
+  }
+
+  private static void capture(MainActivity activity) {
+    try {
+      Method method = MainActivity.class.getDeclaredMethod("frame", boolean.class);
+      method.setAccessible(true);
+      method.invoke(activity, false);
+    } catch (Exception error) {
+      throw new AssertionError(error);
+    }
   }
 
   @Test

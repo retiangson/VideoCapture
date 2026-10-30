@@ -72,12 +72,75 @@ public final class ResponsiveLayoutTests {
   }
 
   @Test
+  public void threeSwipeZonesAdjustIndependentLevelsAndBrightness() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            View view = (View) field(a, "gesturesView");
+            View menu = (View) field(a, "menu");
+            menu.setVisibility(View.GONE);
+            float video = (float) field(a, "videoVolume"),
+                reading = (float) field(a, "readingVolume");
+            swipeZone(view, .16f, -.12f);
+            assertTrue((float) field(a, "videoVolume") > video);
+            assertEquals(reading, (float) field(a, "readingVolume"), .001f);
+            video = (float) field(a, "videoVolume");
+            swipeZone(view, .5f, .18f);
+            assertTrue((float) field(a, "readingVolume") < reading);
+            assertEquals(video, (float) field(a, "videoVolume"), .001f);
+            swipeZone(view, .84f, -1f);
+            assertEquals(1f, a.getWindow().getAttributes().screenBrightness, .001f);
+            swipeZone(view, .84f, 1f);
+            assertEquals(.05f, a.getWindow().getAttributes().screenBrightness, .001f);
+            assertEquals(View.GONE, menu.getVisibility());
+            assertNull("Swiping must not accidentally open the browser", field(a, "browser"));
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> assertEquals(.05f, a.getWindow().getAttributes().screenBrightness, .001f));
+      scenario.onActivity(a -> ((PlayerStore) field(a, "store")).put("customBrightness", "false"));
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertEquals(-1f, a.getWindow().getAttributes().screenBrightness, .001f);
+            float system =
+                Math.max(
+                    .05f,
+                    Math.min(
+                        1,
+                        android.provider.Settings.System.getInt(
+                                a.getContentResolver(),
+                                android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                                128)
+                            / 255f));
+            assertEquals(system, (float) field(a, "brightnessLevel"), .001f);
+          });
+    }
+  }
+
+  private static void swipeZone(View view, float xFraction, float deltaFraction) {
+    float x = view.getWidth() * xFraction, y = view.getHeight() / 2f;
+    long now = SystemClock.uptimeMillis();
+    for (int i = 0; i < 3; i++) {
+      int action = i == 0 ? 0 : i == 1 ? 2 : 1;
+      float end = i == 0 ? y : y + view.getHeight() * deltaFraction;
+      android.view.MotionEvent event =
+          android.view.MotionEvent.obtain(now, now + i * 80, action, x, end, 0);
+      view.dispatchTouchEvent(event);
+      event.recycle();
+    }
+  }
+
+  @Test
   public void rotationLockRetainsStateAndReturnsControlToAndroid() throws Exception {
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
       idle();
       scenario.onActivity(
           a -> {
-            Button lock = button((View) field(a, "menu"), "Lock rotation");
+            Button lock = (Button) field(a, "rotationLockButton");
             assertNotNull(lock);
             assertFalse(lock.isSelected());
             lock.performClick();
@@ -90,7 +153,7 @@ public final class ResponsiveLayoutTests {
       idle();
       scenario.onActivity(
           a -> {
-            Button lock = button((View) field(a, "menu"), "Lock rotation");
+            Button lock = (Button) field(a, "rotationLockButton");
             assertTrue(lock.isSelected());
             assertEquals(
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED,

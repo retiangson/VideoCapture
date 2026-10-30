@@ -53,7 +53,7 @@ public final class MainActivity extends ComponentActivity {
   private View gesturesView;
   private LinearLayout menu, audioPanel;
   private SourceChooser sourceChooser;
-  private TextView status, position, transcriptStatus, mediaTitle;
+  private TextView status, position, transcriptStatus, mediaTitle, gestureFeedback;
   private EditText transcript;
   private SeekBar seek;
   private ProgressBar levelMeter;
@@ -61,6 +61,7 @@ public final class MainActivity extends ComponentActivity {
       recordButton,
       audioStart,
       fullscreenButton,
+      rotationLockButton,
       hideMenuButton,
       pictureModeButton;
   private Spinner audioSource;
@@ -89,6 +90,7 @@ public final class MainActivity extends ComponentActivity {
   private Uri fileUri, lastRecording;
   private long fileSize = -1, fileModified = -1, lastBookmark;
   private boolean draggingSeek;
+  private boolean fileFrameReady, usbFrameReady, frameBusy;
   private volatile CaptureRecorder recorder;
   private final Object recordingGate = new Object();
   private Transformer clipExport;
@@ -108,7 +110,11 @@ public final class MainActivity extends ComponentActivity {
   private TextToSpeech speaker;
   private boolean ttsReady;
   private String lastRead = "", embeddedCue = "";
-  private float videoVolume, readingVolume;
+  private float videoVolume, readingVolume, brightnessLevel;
+  private final Runnable hideGestureFeedback =
+      () -> {
+        if (gestureFeedback != null) gestureFeedback.setVisibility(View.GONE);
+      };
   private long lastOcr;
   private Consumer<Boolean> pendingPermission;
   private ActivityResultLauncher<String[]> files;
@@ -134,6 +140,10 @@ public final class MainActivity extends ComponentActivity {
     if (rotationLocked)
       setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
     videoVolume = store.level("videoVolume", .75f);
+    boolean customBrightness = Boolean.parseBoolean(store.text("customBrightness", "false"));
+    brightnessLevel =
+        customBrightness ? store.level("brightness", systemBrightness()) : systemBrightness();
+    if (customBrightness) applyBrightness(brightnessLevel);
     reading = Boolean.parseBoolean(store.text("reading", "false"));
     readingVolume = store.level("readingVolume", .85f);
     wantLive = "usb".equals(store.text("source", "file"));
@@ -273,6 +283,7 @@ public final class MainActivity extends ComponentActivity {
           public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int w, int h) {}
 
           public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+            usbFrameReady = false;
             if (usb != null) usb.surface(null);
             if (usbSurface != null) {
               usbSurface.release();
@@ -283,12 +294,13 @@ public final class MainActivity extends ComponentActivity {
 
           public void onSurfaceTextureUpdated(SurfaceTexture texture) {
             previewFrames++;
+            if (live && usb != null) usbFrameReady = true;
           }
         });
     gesturesView = new View(this);
     gesturesView.setContentDescription(
-        "Video gestures: double-tap for fullscreen, hold to show controls, tap to hide, two-finger"
-            + " tap for browser");
+        "Video gestures: double-tap for menu, hold for browser, tap to hide menu. Swipe up or down"
+            + " on the left for video volume, center for reading volume, right for brightness.");
     videoLayer.addView(gesturesView, new FrameLayout.LayoutParams(-1, -1));
     videoGestures =
         new VideoGestures(
@@ -296,30 +308,60 @@ public final class MainActivity extends ComponentActivity {
             main,
             new VideoGestures.Actions() {
               public void showMenu() {
+                menu.setTranslationY(0);
+                ((ScrollView) ((PlayerControls) menu).content.getParent()).scrollTo(0, 0);
                 menu.setVisibility(View.VISIBLE);
                 menu.bringToFront();
                 layoutSourceChooser();
               }
 
               public void hideMenu() {
-                if (fullscreen) {
-                  menu.setVisibility(View.GONE);
-                  layoutSourceChooser();
-                }
+                menu.setVisibility(View.GONE);
+                layoutSourceChooser();
               }
 
               public void toggleBrowser() {
                 toggleBrowserPanel();
               }
 
-              public void toggleFullscreen() {
-                setFullscreen(!fullscreen);
+              public float level(VideoGestures.Zone zone) {
+                return switch (zone) {
+                  case VIDEO -> videoVolume;
+                  case READING -> readingVolume;
+                  case BRIGHTNESS -> brightnessLevel;
+                };
+              }
+
+              public void level(VideoGestures.Zone zone, float value) {
+                switch (zone) {
+                  case VIDEO -> setVideoVolume(value);
+                  case READING -> setReadingVolume(value);
+                  case BRIGHTNESS -> applyBrightness(value);
+                }
+                String label =
+                    switch (zone) {
+                      case VIDEO -> "Video volume";
+                      case READING -> "Reading volume";
+                      case BRIGHTNESS -> "Brightness";
+                    };
+                float level = level(zone);
+                gestureFeedback.setText(label + "  " + Math.round(level * 100) + "%");
+                gestureFeedback.setVisibility(View.VISIBLE);
+                main.removeCallbacks(hideGestureFeedback);
+                main.postDelayed(hideGestureFeedback, 900);
               }
             });
-    status = Ui.text(this, "VIDEOCAPTURE  ·  Select USB or open a video to begin", 12, 0xff91a0b7);
+    status =
+        Ui.text(this, "VIDEOCAPTURE  ·  Double-tap for menu · Hold for browser", 12, 0xff91a0b7);
     status.setPadding(dp(18), dp(12), dp(18), dp(10));
     FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
     root.addView(status, sp);
+    gestureFeedback = Ui.text(this, "", 18, PlayerSkin.TEXT);
+    gestureFeedback.setGravity(Gravity.CENTER);
+    gestureFeedback.setPadding(dp(20), dp(12), dp(20), dp(12));
+    gestureFeedback.setBackground(PlayerSkin.surface(dp(12), true));
+    gestureFeedback.setVisibility(View.GONE);
+    root.addView(gestureFeedback, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
     sourceChooser = new SourceChooser(this, this::chooseUsb, this::pickFiles);
     root.addView(
         sourceChooser, new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
@@ -335,15 +377,22 @@ public final class MainActivity extends ComponentActivity {
     root.addView(menu, mp);
     menu.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutSourceChooser());
     LinearLayout top = Ui.row(this);
-    TextView grip = Ui.text(this, "⋮⋮  VIDEOCAPTURE", 11, PlayerSkin.MUTED);
-    grip.setLetterSpacing(.12f);
+    TextView grip = Ui.text(this, "VIDEOCAPTURE · Double-tap for menu", 11, PlayerSkin.MUTED);
+    grip.setMaxLines(2);
+    grip.setEllipsize(android.text.TextUtils.TruncateAt.END);
     top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
-    fullscreenButton = Ui.button(this, "Fullscreen", () -> setFullscreen(!fullscreen));
+    fullscreenButton =
+        MenuIcons.icon(
+            this, MenuIcons.Kind.FULLSCREEN, "Fullscreen", () -> setFullscreen(!fullscreen));
     top.addView(fullscreenButton);
+    rotationLockButton =
+        MenuIcons.icon(this, MenuIcons.Kind.UNLOCK, "Lock rotation", this::toggleRotationLock);
+    top.addView(rotationLockButton);
     hideMenuButton =
-        Ui.button(
+        MenuIcons.icon(
             this,
-            "Hide",
+            MenuIcons.Kind.HIDE,
+            "Hide menu",
             () -> {
               menu.setVisibility(View.GONE);
               layoutSourceChooser();
@@ -402,9 +451,9 @@ public final class MainActivity extends ComponentActivity {
           public void onProgressChanged(SeekBar bar, int value, boolean user) {}
         });
     LinearLayout actions = Ui.row(this);
-    actions.addView(Ui.button(this, "Open", this::pickFiles));
-    actions.addView(Ui.button(this, "Playlist", this::playlist));
-    actions.addView(Ui.button(this, "USB", this::chooseUsb));
+    actions.addView(MenuIcons.action(this, "Open", MenuIcons.Kind.OPEN, this::pickFiles));
+    actions.addView(MenuIcons.action(this, "Playlist", MenuIcons.Kind.PLAYLIST, this::playlist));
+    actions.addView(MenuIcons.action(this, "USB", MenuIcons.Kind.USB, this::chooseUsb));
     LinearLayout transport = Ui.row(this);
     transport.setGravity(Gravity.CENTER);
     transport.setPadding(dp(6), dp(6), dp(6), dp(6));
@@ -429,42 +478,40 @@ public final class MainActivity extends ComponentActivity {
             this, PlayerSkin.Icon.Kind.RECORD, "Record video", this::record, false);
     transport.addView(recordButton);
     menuBody.addView(transport);
-    actions.addView(Ui.button(this, "▣ Copy frame", () -> frame(false)));
-    actions.addView(Ui.button(this, "Save frame", () -> frame(true)));
-    actions.addView(Ui.button(this, "Copy recording", this::copyRecording));
+    actions.addView(MenuIcons.action(this, "Copy frame", MenuIcons.Kind.FRAME, () -> frame(false)));
+    actions.addView(MenuIcons.action(this, "Save frame", MenuIcons.Kind.SAVE, () -> frame(true)));
+    actions.addView(
+        MenuIcons.action(this, "Copy recording", MenuIcons.Kind.COPY, this::copyRecording));
     menuBody.addView(Ui.scrollRow(this, actions));
     LinearLayout more = Ui.row(this);
-    more.addView(Ui.button(this, "Mode / FPS", this::chooseMode));
-    more.addView(Ui.button(this, "Audio input", this::chooseAudio));
-    more.addView(Ui.button(this, "Audio track", this::chooseFileAudio));
+    more.addView(MenuIcons.action(this, "Mode / FPS", MenuIcons.Kind.SETTINGS, this::chooseMode));
+    more.addView(MenuIcons.action(this, "Audio input", MenuIcons.Kind.MIC, this::chooseAudio));
+    more.addView(
+        MenuIcons.action(this, "Audio track", MenuIcons.Kind.MUSIC, this::chooseFileAudio));
     pictureModeButton =
-        Ui.button(this, "Picture: " + PictureMode.read(store).label, this::choosePictureMode);
+        MenuIcons.action(
+            this,
+            "Picture: " + PictureMode.read(store).label,
+            MenuIcons.Kind.PICTURE,
+            this::choosePictureMode);
     more.addView(pictureModeButton);
     addToggle(
         more,
-        "Lock rotation",
-        () -> rotationLocked,
-        () -> {
-          rotationLocked = !rotationLocked;
-          setRequestedOrientation(
-              rotationLocked
-                  ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                  : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-          store.put("rotationLocked", Boolean.toString(rotationLocked));
-        });
-    addToggle(
-        more,
         "Browser",
+        MenuIcons.Kind.BROWSER,
         () -> browser != null && browser.getVisibility() == View.VISIBLE,
         this::toggleBrowserPanel);
-    more.addView(Ui.button(this, "Aa Copy text", () -> recognize(false)));
-    more.addView(Ui.button(this, "Subtitle track", this::chooseSubtitles));
-    addToggle(more, "Read subtitles", () -> reading, this::toggleReading);
-    more.addView(Ui.button(this, "Voice", this::chooseVoice));
-    more.addView(Ui.button(this, "Licenses", this::licenses));
+    more.addView(
+        MenuIcons.action(this, "Aa Copy text", MenuIcons.Kind.TEXT, () -> recognize(false)));
+    more.addView(
+        MenuIcons.action(this, "Subtitle track", MenuIcons.Kind.SUBTITLE, this::chooseSubtitles));
+    addToggle(more, "Read subtitles", MenuIcons.Kind.READ, () -> reading, this::toggleReading);
+    more.addView(MenuIcons.action(this, "Voice", MenuIcons.Kind.AUDIO, this::chooseVoice));
+    more.addView(MenuIcons.action(this, "Licenses", MenuIcons.Kind.INFO, this::licenses));
     addToggle(
         more,
         "Audio to text",
+        MenuIcons.Kind.MIC,
         () ->
             browser != null
                 && browser.getVisibility() == View.VISIBLE
@@ -474,34 +521,21 @@ public final class MainActivity extends ComponentActivity {
     addToggle(
         more,
         "Timeline",
+        MenuIcons.Kind.TIMELINE,
         () -> progress.getVisibility() == View.VISIBLE,
         () -> {
           progress.setVisibility(
               progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
           store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
         });
+    more.addView(
+        MenuIcons.action(this, "Brightness", MenuIcons.Kind.BRIGHTNESS, this::chooseBrightness));
     menuBody.addView(Ui.scrollRow(this, more));
     progress.setVisibility(
         Boolean.parseBoolean(store.text("timeline", "true")) ? View.VISIBLE : View.GONE);
     LinearLayout levels = Ui.row(this);
-    addLevel(
-        levels,
-        "Video",
-        videoVolume,
-        v -> {
-          videoVolume = v;
-          store.putLevel("videoVolume", v);
-          if (player != null) player.setVolume(audioCapturing && capturingMic ? 0 : v);
-          if (usbAudio != null) usbAudio.monitor(true, v);
-        });
-    addLevel(
-        levels,
-        "Reading",
-        readingVolume,
-        v -> {
-          readingVolume = v;
-          store.putLevel("readingVolume", v);
-        });
+    addLevel(levels, "Video", videoVolume, this::setVideoVolume);
+    addLevel(levels, "Reading", readingVolume, this::setReadingVolume);
     addLevel(
         levels,
         "Opacity",
@@ -532,17 +566,84 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void addToggle(
-      LinearLayout row, String label, java.util.function.BooleanSupplier state, Runnable action) {
+      LinearLayout row,
+      String label,
+      MenuIcons.Kind icon,
+      java.util.function.BooleanSupplier state,
+      Runnable action) {
     Button button =
-        Ui.button(
+        MenuIcons.action(
             this,
             label,
+            icon,
             () -> {
               action.run();
               updateToggleStates();
             });
     toggleStates.put(button, state);
     row.addView(button);
+  }
+
+  private void toggleRotationLock() {
+    rotationLocked = !rotationLocked;
+    setRequestedOrientation(
+        rotationLocked
+            ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+            : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+    store.put("rotationLocked", Boolean.toString(rotationLocked));
+    updateToggleStates();
+  }
+
+  private void setVideoVolume(float value) {
+    videoVolume = Math.max(0, Math.min(1, value));
+    store.putLevel("videoVolume", videoVolume);
+    if (player != null) player.setVolume(audioCapturing && capturingMic ? 0 : videoVolume);
+    if (usbAudio != null) usbAudio.monitor(!(audioCapturing && capturingMic), videoVolume);
+    updateLevel("Video", videoVolume);
+  }
+
+  private void setReadingVolume(float value) {
+    readingVolume = Math.max(0, Math.min(1, value));
+    store.putLevel("readingVolume", readingVolume);
+    updateLevel("Reading", readingVolume);
+  }
+
+  private float systemBrightness() {
+    return Math.max(
+        .05f,
+        Math.min(
+            1,
+            Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 128)
+                / 255f));
+  }
+
+  private void applyBrightness(float value) {
+    brightnessLevel = Math.max(.05f, Math.min(1, value));
+    WindowManager.LayoutParams attributes = getWindow().getAttributes();
+    attributes.screenBrightness = brightnessLevel;
+    getWindow().setAttributes(attributes);
+    store.putLevel("brightness", brightnessLevel);
+    store.put("customBrightness", "true");
+  }
+
+  private void chooseBrightness() {
+    SeekBar slider = Ui.slider(this, brightnessLevel, this::applyBrightness);
+    slider.setMin(50);
+    slider.setContentDescription("VideoCapture screen brightness");
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("Screen brightness")
+        .setView(slider)
+        .setPositiveButton("Done", null)
+        .setNeutralButton(
+            "Use system",
+            (dialog, which) -> {
+              store.put("customBrightness", "false");
+              brightnessLevel = systemBrightness();
+              WindowManager.LayoutParams attributes = getWindow().getAttributes();
+              attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+              getWindow().setAttributes(attributes);
+            })
+        .show();
   }
 
   private void updateToggleStates() {
@@ -558,6 +659,10 @@ public final class MainActivity extends ComponentActivity {
       Ui.active(pictureModeButton, mode != PictureMode.REGULAR, mode.label);
     }
     Ui.active(fullscreenButton, fullscreen);
+    Ui.active(rotationLockButton, rotationLocked);
+    MenuIcons.setIcon(
+        rotationLockButton, rotationLocked ? MenuIcons.Kind.LOCK : MenuIcons.Kind.UNLOCK);
+    rotationLockButton.setContentDescription(rotationLocked ? "Unlock rotation" : "Lock rotation");
     boolean playing = player != null && !live && player.isPlaying();
     Ui.active(playButton, playing);
     PlayerSkin.icon(
@@ -663,8 +768,9 @@ public final class MainActivity extends ComponentActivity {
     fullscreen = value;
     updateStatusVisibility();
     menu.setVisibility(value ? View.GONE : View.VISIBLE);
-    hideMenuButton.setVisibility(value ? View.VISIBLE : View.GONE);
-    fullscreenButton.setText(value ? "Exit fullscreen" : "Fullscreen");
+    hideMenuButton.setVisibility(View.VISIBLE);
+    MenuIcons.setIcon(fullscreenButton, value ? MenuIcons.Kind.RESTORE : MenuIcons.Kind.FULLSCREEN);
+    fullscreenButton.setContentDescription(value ? "Exit fullscreen" : "Fullscreen");
     layoutSourceChooser();
     updateToggleStates();
     WindowInsetsControllerCompat controller =
@@ -735,7 +841,18 @@ public final class MainActivity extends ComponentActivity {
           }
 
           @Override
+          public void onRenderedFirstFrame() {
+            fileFrameReady = true;
+          }
+
+          @Override
+          public void onMediaItemTransition(MediaItem item, int reason) {
+            fileFrameReady = false;
+          }
+
+          @Override
           public void onPlayerError(PlaybackException error) {
+            fileFrameReady = false;
             showSourceChooser(true);
             message("Playback: " + error.getMessage());
           }
@@ -769,6 +886,7 @@ public final class MainActivity extends ComponentActivity {
       return;
     }
     bookmark(false);
+    fileFrameReady = false;
     wantLive = false;
     store.put("source", "file");
     stopUsb();
@@ -999,6 +1117,7 @@ public final class MainActivity extends ComponentActivity {
                     () -> {
                       if (closed || token != usbGeneration || usb == null) return;
                       captureSize = mode;
+                      usbFrameReady = false;
                       live = true;
                       showSourceChooser(false);
                       if (!restoredMode) {
@@ -1073,6 +1192,7 @@ public final class MainActivity extends ComponentActivity {
   private void stopUsb() {
     ++usbGeneration;
     live = false;
+    usbFrameReady = false;
     if (usb != null) {
       UsbCapture old = usb;
       usb = null;
@@ -1392,7 +1512,11 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void setRecordingLabel(String label) {
-    recordButton.setText(label.startsWith("●") ? "●" : label.startsWith("■") ? "■" : "…");
+    recordButton.setText("");
+    PlayerSkin.icon(
+        recordButton,
+        label.startsWith("■") ? PlayerSkin.Icon.Kind.STOP : PlayerSkin.Icon.Kind.RECORD,
+        20);
     recordButton.setContentDescription(label);
     recordButton.setTooltipText(label);
     updateToggleStates();
@@ -1600,14 +1724,34 @@ public final class MainActivity extends ComponentActivity {
     message("Recording copied to clipboard.");
   }
 
+  private TextureView captureTexture() {
+    return live
+        ? usbView
+        : playerView.getVideoSurfaceView() instanceof TextureView
+            ? (TextureView) playerView.getVideoSurfaceView()
+            : null;
+  }
+
+  private boolean frameReady() {
+    return live
+        ? usb != null && usbFrameReady && usbView.getVisibility() == View.VISIBLE
+        : player != null
+            && fileUri != null
+            && fileFrameReady
+            && playerView.getVisibility() == View.VISIBLE
+            && !busy
+            && player.getPlayerError() == null;
+  }
+
   private Bitmap snapshot(boolean full) {
-    TextureView texture =
-        live
-            ? usbView
-            : playerView.getVideoSurfaceView() instanceof TextureView
-                ? (TextureView) playerView.getVideoSurfaceView()
-                : null;
+    if (!frameReady()) return null;
+    TextureView texture = captureTexture();
     if (texture == null || !texture.isAvailable()) return null;
+    int[] size = captureDimensions(texture, full);
+    return size == null ? null : FrameCapture.read(texture, size[0], size[1]);
+  }
+
+  private int[] captureDimensions(TextureView texture, boolean full) {
     int width = texture.getWidth(), height = texture.getHeight();
     if (full && live && captureSize != null) {
       width = captureSize.width;
@@ -1626,15 +1770,54 @@ public final class MainActivity extends ComponentActivity {
       width = Math.max(1, (int) (width * scale));
       height = Math.max(1, (int) (height * scale));
     }
-    return texture.getBitmap(width, height);
+    return new int[] {width, height};
   }
 
   private void frame(boolean save) {
-    Bitmap image = snapshot(true);
-    if (image == null) {
-      message("Start video playback before capturing a frame.");
+    if (frameBusy) {
+      message("A frame capture is already in progress.");
       return;
     }
+    TextureView texture = captureTexture();
+    if (!frameReady() || texture == null || !texture.isAvailable()) {
+      message("No video picture is ready. Start playback or USB preview before capturing.");
+      return;
+    }
+    int[] size = captureDimensions(texture, true);
+    if (size == null) {
+      message("The video picture is not available yet.");
+      return;
+    }
+    int fileToken = generation, usbToken = usbGeneration;
+    boolean wasLive = live;
+    frameBusy = true;
+    FrameCapture.capture(
+        texture,
+        size[0],
+        size[1],
+        main,
+        image -> {
+          if (closed
+              || !foreground
+              || wasLive != live
+              || fileToken != generation
+              || usbToken != usbGeneration) {
+            if (image != null) image.recycle();
+            frameBusy = false;
+            return;
+          }
+          if (image == null) {
+            frameBusy = false;
+            message(
+                "Video frame readback failed. Clipboard unchanged; wait for a picture and try"
+                    + " again.");
+            return;
+          }
+          saveCapturedFrame(image, save);
+        });
+  }
+
+  private void saveCapturedFrame(Bitmap image, boolean save) {
     io.execute(
         () -> {
           try {
@@ -1661,6 +1844,7 @@ public final class MainActivity extends ComponentActivity {
             message("Frame capture: " + error.getMessage());
           } finally {
             image.recycle();
+            main.post(() -> frameBusy = false);
           }
         });
   }
@@ -2280,6 +2464,7 @@ public final class MainActivity extends ComponentActivity {
       clipExportFile = null;
     }
     main.removeCallbacks(tick);
+    main.removeCallbacks(hideGestureFeedback);
     speech.close();
     if (browser != null) browser.destroy();
     browserFilesResult = null;

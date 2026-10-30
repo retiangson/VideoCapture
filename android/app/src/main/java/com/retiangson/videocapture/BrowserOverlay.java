@@ -122,9 +122,10 @@ final class BrowserOverlay extends LinearLayout {
     toolsScroll.addView(tools, new ScrollView.LayoutParams(-1, -2));
     addView(toolsScroll, new LinearLayout.LayoutParams(-1, -2));
     navigationButton =
-        Ui.button(
+        MenuIcons.action(
             activity,
-            "⌕  Navigation",
+            "Navigation",
+            MenuIcons.Kind.BROWSER,
             () -> {
               navigation.setVisibility(navigation.getVisibility() == VISIBLE ? GONE : VISIBLE);
               Ui.active(navigationButton, navigation.getVisibility() == VISIBLE);
@@ -173,11 +174,12 @@ final class BrowserOverlay extends LinearLayout {
     navigation.setVisibility(GONE);
     LinearLayout actions = Ui.row(activity);
     actions.addView(navigationButton);
-    actions.addView(Ui.button(activity, "▣ Frame", host::frame));
-    recordingButton = Ui.button(activity, "● Record", host::record);
+    actions.addView(MenuIcons.action(activity, "Frame", MenuIcons.Kind.FRAME, host::frame));
+    recordingButton = MenuIcons.action(activity, "Record", MenuIcons.Kind.RECORD, host::record);
     actions.addView(recordingButton);
-    actions.addView(Ui.button(activity, "Aa Text", host::ocr));
-    transcriptionButton = Ui.button(activity, "♫ Audio to text", host::audio);
+    actions.addView(MenuIcons.action(activity, "Text", MenuIcons.Kind.TEXT, host::ocr));
+    transcriptionButton =
+        MenuIcons.action(activity, "Audio to text", MenuIcons.Kind.MIC, host::audio);
     actions.addView(transcriptionButton);
     tools.addView(Ui.scrollRow(activity, actions), 0);
     int savedIndex = 0;

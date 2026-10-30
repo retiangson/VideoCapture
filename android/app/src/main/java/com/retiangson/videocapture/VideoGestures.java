@@ -6,6 +6,12 @@ import android.view.View;
 import android.view.ViewConfiguration;
 
 final class VideoGestures implements View.OnTouchListener {
+  enum Zone {
+    VIDEO,
+    READING,
+    BRIGHTNESS
+  }
+
   interface Actions {
     void showMenu();
 
@@ -13,7 +19,9 @@ final class VideoGestures implements View.OnTouchListener {
 
     void toggleBrowser();
 
-    void toggleFullscreen();
+    float level(Zone zone);
+
+    void level(Zone zone, float value);
   }
 
   private final Actions actions;
@@ -24,14 +32,16 @@ final class VideoGestures implements View.OnTouchListener {
   private boolean secondTap;
   private long started;
   private float x, y;
+  private Zone zone;
+  private float startingLevel;
   private boolean multiple, moved, held, invalid;
-  private final Runnable hold = this::showHeldMenu;
+  private final Runnable hold = this::showHeldBrowser;
 
-  private void showHeldMenu() {
+  private void showHeldBrowser() {
     if (!multiple && !moved && !invalid) {
       held = true;
       lastTap = 0;
-      actions.showMenu();
+      actions.toggleBrowser();
     }
   }
 
@@ -51,6 +61,11 @@ final class VideoGestures implements View.OnTouchListener {
         started = event.getEventTime();
         x = event.getX();
         y = event.getY();
+        zone =
+            x < view.getWidth() / 3f
+                ? Zone.VIDEO
+                : x < view.getWidth() * 2f / 3 ? Zone.READING : Zone.BRIGHTNESS;
+        startingLevel = actions.level(zone);
         secondTap =
             lastTap > 0
                 && started - lastTap <= ViewConfiguration.getDoubleTapTimeout()
@@ -73,6 +88,15 @@ final class VideoGestures implements View.OnTouchListener {
           secondTap = false;
           handler.removeCallbacks(hold);
         }
+        if (moved
+            && !multiple
+            && !invalid
+            && !held
+            && Math.abs(event.getY() - y) > Math.abs(event.getX() - x)) {
+          float travel = Math.max(1, view.getHeight() * .6f);
+          actions.level(
+              zone, Math.max(0, Math.min(1, startingLevel + (y - event.getY()) / travel)));
+        }
         return true;
       case MotionEvent.ACTION_UP:
         handler.removeCallbacks(hold);
@@ -82,7 +106,7 @@ final class VideoGestures implements View.OnTouchListener {
             if (secondTap
                 && event.getEventTime() - started <= ViewConfiguration.getDoubleTapTimeout()) {
               lastTap = 0;
-              actions.toggleFullscreen();
+              actions.showMenu();
             } else {
               actions.hideMenu();
               lastTap = event.getEventTime();
