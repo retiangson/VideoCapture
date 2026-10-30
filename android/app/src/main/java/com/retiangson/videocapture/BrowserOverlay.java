@@ -19,6 +19,8 @@ final class BrowserOverlay extends LinearLayout {
       return false;
     }
 
+    default void microphoneReleased() {}
+
     void permission(Consumer<Boolean> result);
 
     void feedback(String value);
@@ -37,6 +39,7 @@ final class BrowserOverlay extends LinearLayout {
   private final PlayerStore store;
   private final Host host;
   private final BrowserAttachments attachments;
+  private final BrowserMicrophone microphone;
   private final LinearLayout tabs = Ui.row(getContext()), navigation = Ui.row(getContext());
   private final FrameLayout page;
   private final LinearLayout tools;
@@ -64,6 +67,29 @@ final class BrowserOverlay extends LinearLayout {
     this.store = store;
     this.host = host;
     attachments = new BrowserAttachments(activity, host::chooseFiles, host::feedback);
+    microphone =
+        new BrowserMicrophone(
+            activity,
+            new BrowserMicrophone.Host() {
+              public void prepare(Consumer<Boolean> ready) {
+                host.permission(ready);
+              }
+
+              public void released() {
+                host.microphoneReleased();
+              }
+
+              public void feedback(String message) {
+                host.feedback(message);
+              }
+
+              public boolean active(WebView view) {
+                return !disposed
+                    && getVisibility() == VISIBLE
+                    && view == current()
+                    && !activity.isFinishing();
+              }
+            });
     setOrientation(VERTICAL);
     setPadding(Ui.dp(activity, 8), Ui.dp(activity, 6), Ui.dp(activity, 8), Ui.dp(activity, 6));
     setBackground(PlayerSkin.surface(Ui.dp(activity, 12), false));
@@ -219,6 +245,10 @@ final class BrowserOverlay extends LinearLayout {
   }
 
   void add(String url) {
+    if (BrowserNavigation.externalSignIn(url)) {
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+      url = HOME;
+    }
     if (disposed || views.size() >= 32) {
       host.feedback("Browser tab limit reached (32).");
       return;
@@ -236,16 +266,29 @@ final class BrowserOverlay extends LinearLayout {
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     settings.setSafeBrowsingEnabled(true);
     settings.setMediaPlaybackRequiresUserGesture(true);
+    microphone.install(view);
     CookieManager.getInstance().setAcceptCookie(true);
     view.setWebViewClient(
         new WebViewClient() {
           @Override
           public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
+            if (BrowserNavigation.externalSignIn(url)) {
+              v.stopLoading();
+              BrowserNavigation.openSignIn(activity, url, host::feedback);
+              v.loadUrl(HOME);
+              return;
+            }
             attachments.cancelFor(v);
+            microphone.navigation(v);
           }
 
           @Override
           public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
+            if (BrowserNavigation.externalSignIn(request.getUrl().toString())) {
+              if (request.isForMainFrame())
+                BrowserNavigation.openSignIn(activity, request.getUrl().toString(), host::feedback);
+              return true;
+            }
             if (!valid(request.getUrl().toString())) {
               host.feedback("Only HTTPS browser navigation is supported.");
               return true;
@@ -304,7 +347,8 @@ final class BrowserOverlay extends LinearLayout {
                   }
                   String origin = view.getUrl();
                   requests.add(request);
-                  host.permission(
+                  microphone.permission(
+                      view,
                       ok -> {
                         if (!requests.remove(request)) return;
                         if (ok && !disposed && Objects.equals(view.getUrl(), origin))
@@ -339,12 +383,16 @@ final class BrowserOverlay extends LinearLayout {
             host.feedback("Downloads are not supported in the floating browser."));
     page.addView(view, new FrameLayout.LayoutParams(-1, -1));
     select(views.size() - 1);
-    if (!"about:blank".equals(url)) view.loadUrl(url);
+    if (BrowserNavigation.externalSignIn(url))
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+    else if (!"about:blank".equals(url)) view.loadUrl(url);
   }
 
   private void navigate(String url) {
     if (!url.contains("://")) url = "https://" + url;
-    if (valid(url) && current() != null) current().loadUrl(url);
+    if (BrowserNavigation.externalSignIn(url))
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+    else if (valid(url) && current() != null) current().loadUrl(url);
     else host.feedback("Enter a valid HTTPS address.");
   }
 
@@ -353,6 +401,8 @@ final class BrowserOverlay extends LinearLayout {
   }
 
   private void select(int index) {
+    WebView previous = current();
+    if (previous != null && views.indexOf(previous) != index) microphone.stop(previous);
     attachments.cancel();
     selected = index;
     for (int i = 0; i < views.size(); i++) views.get(i).setVisibility(i == index ? VISIBLE : GONE);
@@ -384,6 +434,7 @@ final class BrowserOverlay extends LinearLayout {
   private void closeTab(int index) {
     if (index < 0 || index >= views.size()) return;
     WebView view = views.remove(index);
+    microphone.remove(view);
     attachments.cancelFor(view);
     destinations.remove(view);
     titles.remove(index);
@@ -442,6 +493,7 @@ final class BrowserOverlay extends LinearLayout {
   @Override
   protected void onVisibilityChanged(View changedView, int visibility) {
     super.onVisibilityChanged(changedView, visibility);
+    if (microphone != null && getVisibility() != VISIBLE) microphone.stopAll();
     if (host != null) host.stateChanged();
   }
 
@@ -550,9 +602,20 @@ final class BrowserOverlay extends LinearLayout {
     layoutWithinParent();
   }
 
-  void pause() {
+  void pause(boolean awaitingMicrophonePermission) {
+    // Android's first-use permission dialog pauses the host before returning its decision.
+    // No stream can exist yet; keep the pending handshake alive until the activity resumes.
+    if (!awaitingMicrophonePermission) stopMicrophone();
     CookieManager.getInstance().flush();
     for (WebView view : views) view.onPause();
+  }
+
+  void stopMicrophone() {
+    microphone.stopAll();
+  }
+
+  void clearCache() {
+    for (WebView view : views) view.clearCache(true);
   }
 
   void resume() {
@@ -561,6 +624,7 @@ final class BrowserOverlay extends LinearLayout {
 
   void destroy() {
     save();
+    microphone.stopAll();
     disposed = true;
     attachments.cancel();
     for (PermissionRequest request : requests)

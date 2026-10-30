@@ -30,7 +30,15 @@ import org.junit.runner.RunWith;
 public final class AndroidParityTests {
   @Rule
   public GrantPermissionRule permissions =
-      GrantPermissionRule.grant(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO);
+      GrantPermissionRule.grant(
+          firstBrowserPermission()
+              ? new String[] {Manifest.permission.CAMERA}
+              : new String[] {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO});
+
+  private static boolean firstBrowserPermission() {
+    return "true"
+        .equals(InstrumentationRegistry.getArguments().getString("firstBrowserPermission"));
+  }
 
   private Context target() {
     return InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -541,6 +549,10 @@ public final class AndroidParityTests {
 
   @Test
   public void chatGptBrowserMicrophoneUsesExactOriginPolicy() throws Exception {
+    if (firstBrowserPermission())
+      assertEquals(
+          android.content.pm.PackageManager.PERMISSION_DENIED,
+          target().checkSelfPermission(Manifest.permission.RECORD_AUDIO));
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
       AtomicReference<android.webkit.WebView> browser = new AtomicReference<>();
       AtomicBoolean granted = new AtomicBoolean();
@@ -572,6 +584,10 @@ public final class AndroidParityTests {
                           @Override
                           public void grant(String[] resources) {
                             assertArrayEquals(new String[] {RESOURCE_AUDIO_CAPTURE}, resources);
+                            assertTrue((Boolean) field(a, "browserUsingMicrophone"));
+                            assertTrue((Boolean) field(a, "browserAudioReady"));
+                            assertNull(field(a, "microphone"));
+                            assertNull(field(a, "usbAudio"));
                             granted.set(true);
                             original.grant(resources);
                           }
@@ -605,11 +621,20 @@ public final class AndroidParityTests {
           });
       waitDocument(browser.get(), "https://chatgpt.com/permission-fixture");
       requestBrowserAudio(browser.get());
+      approveBrowserMicrophone();
+      if (firstBrowserPermission()) approveSystemMicrophone();
       String result = awaitJavascript(browser.get(), "window.__captureResult");
       assertTrue("Trusted browser audio was not granted", granted.get());
       assertFalse(denied.get());
       // A headless emulator may grant permission but have no readable audio hardware.
       assertTrue(result, result.equals("allowed") || result.equals("NotReadableError"));
+      AtomicBoolean released = new AtomicBoolean();
+      long releaseDeadline = SystemClock.uptimeMillis() + 5000;
+      while (!released.get() && SystemClock.uptimeMillis() < releaseDeadline) {
+        scenario.onActivity(a -> released.set(!(Boolean) field(a, "browserUsingMicrophone")));
+        if (!released.get()) SystemClock.sleep(50);
+      }
+      assertTrue("Browser error/track stop must release app audio ownership", released.get());
       granted.set(false);
       scenario.onActivity(
           a -> browser.get().loadUrl("https://untrusted.example/permission-fixture"));
@@ -619,6 +644,37 @@ public final class AndroidParityTests {
       assertFalse(granted.get());
       assertTrue(denied.get());
     }
+  }
+
+  private static void approveBrowserMicrophone() throws Exception {
+    long deadline = SystemClock.uptimeMillis() + 10000;
+    while (SystemClock.uptimeMillis() < deadline) {
+      android.view.accessibility.AccessibilityNodeInfo root =
+          InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
+      if (root != null)
+        for (android.view.accessibility.AccessibilityNodeInfo node :
+            root.findAccessibilityNodeInfosByText("Allow microphone"))
+          if (node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            return;
+      SystemClock.sleep(80);
+    }
+    fail("Browser microphone disclosure was not presented");
+  }
+
+  private static void approveSystemMicrophone() throws Exception {
+    long deadline = SystemClock.uptimeMillis() + 10000;
+    while (SystemClock.uptimeMillis() < deadline) {
+      android.view.accessibility.AccessibilityNodeInfo root =
+          InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
+      if (root != null)
+        for (android.view.accessibility.AccessibilityNodeInfo node :
+            root.findAccessibilityNodeInfosByViewId(
+                "com.android.permissioncontroller:id/permission_allow_foreground_only_button"))
+          if (node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            return;
+      SystemClock.sleep(80);
+    }
+    fail("First browser use must request Android microphone permission");
   }
 
   private static void waitDocument(android.webkit.WebView view, String expectedUrl)
@@ -669,6 +725,7 @@ public final class AndroidParityTests {
 
   @Test
   public void bundledOcrWorksOffline() throws Exception {
+    OcrConsent.initialize(target());
     Bitmap image = Bitmap.createBitmap(1000, 200, Bitmap.Config.ARGB_8888);
     Canvas canvas = new Canvas(image);
     canvas.drawColor(Color.WHITE);
