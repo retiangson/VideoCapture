@@ -39,6 +39,6 @@ internal static class ButtonStateTests
         var surface=(Border)button.Template.FindName("Surface",button);
         if(ButtonState.GetIsActive(button)!=on || mark.Visibility!=(on?Visibility.Visible:Visibility.Collapsed) ||
            System.Windows.Automation.AutomationProperties.GetItemStatus(button)!=(name=="FitButton" ? on?"Fill":"Regular" : on?"On":"Off")) throw new Exception("Stale button state: "+name);
-        if(on && ((SolidColorBrush)surface.Background).Color!=Color.FromRgb(0x24,0x55,0x48)) throw new Exception("Active button fill not applied: "+name);
+        if(on && ((SolidColorBrush)surface.Background).Color!=Color.FromRgb(0x17,0x41,0x2D)) throw new Exception("Active button fill not applied: "+name);
     }
 }

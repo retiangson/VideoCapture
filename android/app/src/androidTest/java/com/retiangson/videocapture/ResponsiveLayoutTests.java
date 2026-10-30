@@ -72,6 +72,156 @@ public final class ResponsiveLayoutTests {
   }
 
   @Test
+  public void threeSwipeZonesAdjustIndependentLevelsAndBrightness() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            View view = (View) field(a, "gesturesView");
+            View menu = (View) field(a, "menu");
+            menu.setVisibility(View.GONE);
+            float video = (float) field(a, "videoVolume"),
+                reading = (float) field(a, "readingVolume");
+            swipeZone(view, .16f, -.12f);
+            assertTrue((float) field(a, "videoVolume") > video);
+            assertEquals(reading, (float) field(a, "readingVolume"), .001f);
+            video = (float) field(a, "videoVolume");
+            swipeZone(view, .5f, .18f);
+            assertTrue((float) field(a, "readingVolume") < reading);
+            assertEquals(video, (float) field(a, "videoVolume"), .001f);
+            swipeZone(view, .84f, -1f);
+            assertEquals(1f, a.getWindow().getAttributes().screenBrightness, .001f);
+            swipeZone(view, .84f, 1f);
+            assertEquals(.05f, a.getWindow().getAttributes().screenBrightness, .001f);
+            assertEquals(View.GONE, menu.getVisibility());
+            assertNull("Swiping must not accidentally open the browser", field(a, "browser"));
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> assertEquals(.05f, a.getWindow().getAttributes().screenBrightness, .001f));
+      scenario.onActivity(a -> ((PlayerStore) field(a, "store")).put("customBrightness", "false"));
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertEquals(-1f, a.getWindow().getAttributes().screenBrightness, .001f);
+            float system =
+                Math.max(
+                    .05f,
+                    Math.min(
+                        1,
+                        android.provider.Settings.System.getInt(
+                                a.getContentResolver(),
+                                android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                                128)
+                            / 255f));
+            assertEquals(system, (float) field(a, "brightnessLevel"), .001f);
+          });
+    }
+  }
+
+  private static void swipeZone(View view, float xFraction, float deltaFraction) {
+    float x = view.getWidth() * xFraction, y = view.getHeight() / 2f;
+    long now = SystemClock.uptimeMillis();
+    for (int i = 0; i < 3; i++) {
+      int action = i == 0 ? 0 : i == 1 ? 2 : 1;
+      float end = i == 0 ? y : y + view.getHeight() * deltaFraction;
+      android.view.MotionEvent event =
+          android.view.MotionEvent.obtain(now, now + i * 80, action, x, end, 0);
+      view.dispatchTouchEvent(event);
+      event.recycle();
+    }
+  }
+
+  @Test
+  public void rotationLockRetainsStateAndReturnsControlToAndroid() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            Button lock = (Button) field(a, "rotationLockButton");
+            assertNotNull(lock);
+            assertFalse(lock.isSelected());
+            lock.performClick();
+            assertTrue(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED,
+                a.getRequestedOrientation());
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            Button lock = (Button) field(a, "rotationLockButton");
+            assertTrue(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED,
+                a.getRequestedOrientation());
+            lock.performClick();
+            assertFalse(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                a.getRequestedOrientation());
+            assertEquals("false", ((PlayerStore) field(a, "store")).text("rotationLocked", "true"));
+          });
+    }
+  }
+
+  @Test
+  public void playerLevelsJumpOnTapAndRetainIndependentVolumes() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, SeekBar> levels =
+                (java.util.Map<String, SeekBar>) field(a, "levelSliders");
+            PlayerStore store = (PlayerStore) field(a, "store");
+            tapLevel(levels.get("Video"), .8f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            assertEquals(.85f, (float) field(a, "readingVolume"), .001f);
+            tapLevel(levels.get("Reading"), .25f);
+            assertEquals(.25f, store.level("readingVolume", 0), .02f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            tapLevel(levels.get("Opacity"), 0);
+            assertEquals(.35f, ((View) field(a, "menu")).getAlpha(), .001f);
+            SeekBar video = levels.get("Video");
+            video.setEnabled(false);
+            tapLevel(video, .1f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            video.setEnabled(true);
+            video.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            tapLevel(video, .2f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertEquals(.8f, (float) field(a, "videoVolume"), .02f);
+            assertEquals(.25f, (float) field(a, "readingVolume"), .02f);
+            assertEquals(.35f, ((View) field(a, "menu")).getAlpha(), .001f);
+          });
+    }
+  }
+
+  private static void tapLevel(SeekBar slider, float fraction) {
+    float x =
+        slider.getPaddingLeft()
+            + fraction * (slider.getWidth() - slider.getPaddingLeft() - slider.getPaddingRight());
+    long now = SystemClock.uptimeMillis();
+    android.view.MotionEvent down =
+        android.view.MotionEvent.obtain(now, now, 0, x, slider.getHeight() / 2f, 0);
+    android.view.MotionEvent up =
+        android.view.MotionEvent.obtain(now, now + 60, 1, x, slider.getHeight() / 2f, 0);
+    slider.dispatchTouchEvent(down);
+    slider.dispatchTouchEvent(up);
+    down.recycle();
+    up.recycle();
+  }
+
+  @Test
   public void startupShowsSourceActionsAndWindowedControls() throws Exception {
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
       idle();

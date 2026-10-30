@@ -2,7 +2,7 @@
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
  Title="VideoCapture" Icon="Assets/AppIcon.png" Width="1240" Height="800" MinWidth="940" MinHeight="660"
- Background="#0B1019" Foreground="#E8EEF7" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen"
+ Background="#111514" Foreground="#EEF3EF" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen"
  PreviewKeyDown="Window_KeyDown" PreviewMouseWheel="Video_OpacityWheel" AllowDrop="True" Drop="Window_Drop">
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/PlayerTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Grid x:Name="RootLayout" Margin="24">
@@ -11,7 +11,7 @@
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
     <Image Source="Assets/AppIcon.png" Width="38" Height="38" Margin="0,0,12,0"/>
-    <StackPanel><TextBlock Text="VideoCapture" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="PLAYER  /  CAPTURE STUDIO" Foreground="#7F90AA" FontSize="9" Margin="0,3,0,0"/></StackPanel>
+    <StackPanel><TextBlock Text="VideoCapture" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="PLAYER  /  CAPTURE STUDIO" Foreground="#87958D" FontSize="9" Margin="0,3,0,0"/></StackPanel>
    </StackPanel>
    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
     <Button x:Name="OpenButton" Click="Open_Click" Style="{StaticResource AccentButton}"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="Open videos"/></StackPanel></Button>
@@ -22,18 +22,18 @@
   </Grid>
   <Grid x:Name="PlayerLayout" Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
+   <Border x:Name="VideoBorder" Background="Black" BorderBrush="#454F48" BorderThickness="1" CornerRadius="12" ClipToBounds="True" Margin="0,0,16,0" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" SizeChanged="Video_SizeChanged">
     <Grid>
      <vlc:VideoView x:Name="GpuVideo" Visibility="Collapsed"><Grid x:Name="VideoInputOverlay" Background="Transparent" Focusable="True" MouseLeftButtonDown="Video_MouseDown" MouseLeftButtonUp="Video_LeftClick" MouseMove="Video_MenuPressMove" LostMouseCapture="Video_MenuPressLostCapture" PreviewMouseWheel="Video_OpacityWheel" MouseRightButtonUp="Video_RightClick" PreviewKeyDown="Window_KeyDown"/></vlc:VideoView>
      <Viewbox x:Name="VideoScale" Stretch="Uniform"><Image x:Name="Video" Stretch="Fill" Width="16" Height="9" RenderOptions.BitmapScalingMode="LowQuality"/></Viewbox>
      <TextBlock x:Name="VideoPlaceholder" Text="Your screen, uninterrupted.&#10;&#10;Open videos or choose a capture device." Foreground="#8495AF" FontSize="16" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="32" MaxWidth="420"/>
     </Grid>
    </Border>
-   <Border x:Name="DevicePanel" Grid.Column="1" Background="#131B29" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" Padding="12">
+   <Border x:Name="DevicePanel" Grid.Column="1" Background="#212624" BorderBrush="#454F48" BorderThickness="1" CornerRadius="12" Padding="12">
     <TabControl x:Name="LibraryTabs" Background="Transparent" BorderThickness="0">
      <TabItem x:Name="CaptureTab" Header="Capture">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,14,0,0"><StackPanel>
-       <TextBlock Text="LIVE SOURCE" Foreground="#5CE0C1" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
+       <TextBlock Text="LIVE SOURCE" Foreground="#25E685" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
        <TextBlock Text="Video device" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="VideoDevices" DisplayMemberPath="Name" SelectionChanged="VideoDevice_Changed"/>
        <TextBlock Text="Resolution" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="CaptureResolutions" DisplayMemberPath="Name" IsEnabled="False" SelectionChanged="CaptureResolution_Changed"/>
        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -42,35 +42,35 @@
        </Grid>
        <TextBlock Text="Audio device" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="AudioDevices" DisplayMemberPath="Name" SelectionChanged="CaptureSetting_Changed"/>
        <CheckBox x:Name="MonitorCaptureAudio" Content="Monitor capture audio" IsChecked="True" Checked="MonitorCaptureAudio_Changed" Unchecked="MonitorCaptureAudio_Changed" ToolTip="Play capture audio through speakers. Disable to prevent microphone echo; recording and transcription still capture source audio." Margin="0,6,0,8"/>
-       <TextBlock x:Name="SourceDetails" Text="Choose a device. Preview starts automatically." Foreground="#91A0B7" FontSize="11" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,14"/>
+       <TextBlock x:Name="SourceDetails" Text="Choose a device. Preview starts automatically." Foreground="#A1ABA6" FontSize="11" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,14"/>
        <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <Button x:Name="RecordButton" Click="Record_Click" Background="#9B344E" BorderBrush="#B64662"><StackPanel Orientation="Horizontal"><TextBlock Text="●" Foreground="#FFCAD6" Margin="0,0,7,0"/><TextBlock x:Name="RecordLabel" Text="Record live"/></StackPanel></Button>
         <Button x:Name="RefreshButton" Grid.Column="1" Content="&#xE72C;" Style="{StaticResource IconButton}" Click="Refresh_Click" ToolTip="Refresh devices" AutomationProperties.Name="Refresh devices" Margin="0"/>
        </Grid>
        <TextBlock x:Name="RecordingTime" FontSize="20" Foreground="#FF91AC"/>
        <Border Height="1" Background="#29364B" Margin="0,0,0,14"/>
-       <TextBlock Text="PICTURE &amp; TOOLS" Foreground="#5CE0C1" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
+       <TextBlock Text="PICTURE &amp; TOOLS" Foreground="#25E685" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,12"/>
        <TextBlock Text="Picture fit" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PictureFit" SelectedIndex="0" SelectionChanged="PictureFit_Changed"><ComboBoxItem Content="Regular · whole picture"/><ComboBoxItem Content="Fill · crop edges"/><ComboBoxItem Content="Stretch · change proportions"/></ComboBox>
        <TextBlock Text="Renderer · stop to change" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="PreviewRenderer" SelectedIndex="0" SelectionChanged="PreviewRenderer_Changed"><ComboBoxItem Content="GPU · fastest"/><ComboBoxItem Content="Compatibility · CPU"/></ComboBox>
-       <DockPanel><TextBlock Text="Menu opacity" Style="{StaticResource FieldLabel}"/><TextBlock Text="{Binding Value, ElementName=MenuOpacity, StringFormat={}{0:P0}}" Foreground="#E8EEF7" HorizontalAlignment="Right"/></DockPanel>
+       <DockPanel><TextBlock Text="Menu opacity" Style="{StaticResource FieldLabel}"/><TextBlock Text="{Binding Value, ElementName=MenuOpacity, StringFormat={}{0:P0}}" Foreground="#EEF3EF" HorizontalAlignment="Right"/></DockPanel>
        <Slider x:Name="MenuOpacity" Minimum="0.35" Maximum="1" Value="0.96" SmallChange="0.01" LargeChange="0.1" ValueChanged="MenuOpacity_Changed" Margin="0,0,0,12" ToolTip="Opacity of the entire fullscreen menu"/>
        <Button x:Name="CopyFrameButton" Content="Copy frame" Click="CopyFrame_Click" IsEnabled="False" Margin="0,0,0,7"/>
        <Button x:Name="CopyTextButton" Content="Copy video text" Click="CopyText_Click" IsEnabled="False" Margin="0,0,0,7"/>
        <Button x:Name="ScreenTextButton" Content="Select screen text…" Click="ScreenText_Click" Margin="0,0,0,12"/>
-       <TextBlock Text="Fullscreen: left-click for controls, right-click for browser. Preferences save automatically." Foreground="#7F90AA" FontSize="11" TextWrapping="Wrap" LineHeight="17"/>
+       <TextBlock Text="Fullscreen: left-click for controls, right-click for browser. Preferences save automatically." Foreground="#87958D" FontSize="11" TextWrapping="Wrap" LineHeight="17"/>
       </StackPanel></ScrollViewer>
      </TabItem>
      <TabItem x:Name="PlaylistTab" Header="Playlist">
       <Grid Margin="0,14,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-       <DockPanel Margin="0,0,0,10"><Button x:Name="AddPlaylistButton" Content="+  Add videos" Click="AddPlaylist_Click" DockPanel.Dock="Right" Margin="0"/><TextBlock x:Name="PlaylistCount" Text="0 videos" Foreground="#91A0B7" VerticalAlignment="Center"/></DockPanel>
+       <DockPanel Margin="0,0,0,10"><Button x:Name="AddPlaylistButton" Content="+  Add videos" Click="AddPlaylist_Click" DockPanel.Dock="Right" Margin="0"/><TextBlock x:Name="PlaylistCount" Text="0 videos" Foreground="#A1ABA6" VerticalAlignment="Center"/></DockPanel>
        <Grid Grid.Row="1">
         <ListBox x:Name="PlaylistList" SelectionChanged="Playlist_SelectionChanged" MouseDoubleClick="Playlist_DoubleClick" PreviewKeyDown="Playlist_KeyDown">
          <ListBox.ItemTemplate><DataTemplate><Grid ToolTip="{Binding Path}"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE714;" VerticalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#8091AC"/><Style.Triggers><DataTrigger Binding="{Binding IsCurrent}" Value="True"><Setter Property="Foreground" Value="#5CE0C1"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
-          <StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Location}" Foreground="#7F90AA" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/></StackPanel>
+          <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE714;" VerticalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#87988D"/><Style.Triggers><DataTrigger Binding="{Binding IsCurrent}" Value="True"><Setter Property="Foreground" Value="#25E685"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+          <StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Location}" Foreground="#87958D" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/></StackPanel>
          </Grid></DataTemplate></ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock x:Name="PlaylistEmpty" Text="Make room for a movie night.&#10;&#10;Add videos or drop files here.&#10;They play in queue order." Foreground="#7F90AA" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center" IsHitTestVisible="False" Margin="10" LineHeight="20"/>
+        <TextBlock x:Name="PlaylistEmpty" Text="Make room for a movie night.&#10;&#10;Add videos or drop files here.&#10;They play in queue order." Foreground="#87958D" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center" IsHitTestVisible="False" Margin="10" LineHeight="20"/>
        </Grid>
        <StackPanel Grid.Row="2" Margin="0,12,0,0">
         <Button x:Name="PlayPlaylistButton" Content="Play selected" Style="{StaticResource AccentButton}" Click="PlayPlaylist_Click" Margin="0,0,0,10"/>
@@ -80,46 +80,46 @@
      </TabItem>
      <TabItem Header="Speech">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,14,0,0"><StackPanel Margin="0,0,8,0">
-       <TextBlock Text="SUBTITLE VOICE" Foreground="#5CE0C1" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,14"/>
-       <CheckBox x:Name="SpeechEnabled" Content="Read subtitles aloud" IsChecked="False" Foreground="#E8EEF7" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,14" Checked="SpeechToggle_Changed" Unchecked="SpeechToggle_Changed"/>
-       <TextBlock Text="Embedded text is preferred. Otherwise, the reader recognizes visible captions in the selected region." TextWrapping="Wrap" Foreground="#91A0B7" FontSize="11" LineHeight="18" Margin="0,0,0,16"/>
+       <TextBlock Text="SUBTITLE VOICE" Foreground="#25E685" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,14"/>
+       <CheckBox x:Name="SpeechEnabled" Content="Read subtitles aloud" IsChecked="False" Foreground="#EEF3EF" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,14" Checked="SpeechToggle_Changed" Unchecked="SpeechToggle_Changed"/>
+       <TextBlock Text="Embedded text is preferred. Otherwise, the reader recognizes visible captions in the selected region." TextWrapping="Wrap" Foreground="#A1ABA6" FontSize="11" LineHeight="18" Margin="0,0,0,16"/>
        <TextBlock Text="Subtitle source / track" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="SpeechTrack" SelectionChanged="SpeechTrack_Changed" ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"/>
        <TextBlock Text="Windows voice" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="SpeechVoice" IsEnabled="False" SelectionChanged="SpeechVoice_Changed" ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"/>
        <TextBlock Text="Speech speed" Style="{StaticResource FieldLabel}"/>
-       <DockPanel><TextBlock Text="{Binding Value, ElementName=SpeechRate, StringFormat={}{0:0}}" DockPanel.Dock="Right" Foreground="#91A0B7" Margin="8,0,0,0" VerticalAlignment="Center"/><Slider x:Name="SpeechRate" Minimum="-5" Maximum="5" SmallChange="1" Value="0" ValueChanged="SpeechSetting_Changed"/></DockPanel>
+       <DockPanel><TextBlock Text="{Binding Value, ElementName=SpeechRate, StringFormat={}{0:0}}" DockPanel.Dock="Right" Foreground="#A1ABA6" Margin="8,0,0,0" VerticalAlignment="Center"/><Slider x:Name="SpeechRate" Minimum="-5" Maximum="5" SmallChange="1" Value="0" ValueChanged="SpeechSetting_Changed"/></DockPanel>
        <TextBlock Text="Speech volume" Style="{StaticResource FieldLabel}" Margin="0,10,0,0"/>
        <Slider x:Name="SpeechSettingsVolume" Minimum="0" Maximum="100" Value="{Binding Value, ElementName=SpeechVolume, Mode=TwoWay}" Margin="0,0,0,12" ToolTip="Same reading volume as the player controls"/>
        <TextBlock Text="OCR subtitle region" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="SpeechRegion" SelectedIndex="0" SelectionChanged="SpeechVoice_Changed"><ComboBoxItem Content="Bottom 35%"/><ComboBoxItem Content="Bottom 50%"/><ComboBoxItem Content="Whole picture"/></ComboBox>
-       <Border Background="#1B273A" CornerRadius="8" Padding="12" Margin="0,8,0,0"><StackPanel>
-        <TextBlock x:Name="SpeechMode" Text="Subtitle reading is off." Foreground="#5CE0C1" TextWrapping="Wrap" FontSize="11"/>
-        <TextBlock x:Name="SpeechCurrent" Text="Enable reading to load installed voices." Foreground="#A7B4C8" TextWrapping="Wrap" FontSize="12" LineHeight="19" Margin="0,10,0,0"/>
+       <Border Background="#282F2B" CornerRadius="8" Padding="12" Margin="0,8,0,0"><StackPanel>
+        <TextBlock x:Name="SpeechMode" Text="Subtitle reading is off." Foreground="#25E685" TextWrapping="Wrap" FontSize="11"/>
+        <TextBlock x:Name="SpeechCurrent" Text="Enable reading to load installed voices." Foreground="#ABB8AF" TextWrapping="Wrap" FontSize="12" LineHeight="19" Margin="0,10,0,0"/>
        </StackPanel></Border>
-       <TextBlock Text="OCR needs visible subtitles and currently recognizes English. Speech and OCR run on this PC. New lines replace unfinished speech to avoid a backlog." TextWrapping="Wrap" Foreground="#7F90AA" FontSize="11" LineHeight="17" Margin="0,16,0,0"/>
+       <TextBlock Text="OCR needs visible subtitles and currently recognizes English. Speech and OCR run on this PC. New lines replace unfinished speech to avoid a backlog." TextWrapping="Wrap" Foreground="#87958D" FontSize="11" LineHeight="17" Margin="0,16,0,0"/>
       </StackPanel></ScrollViewer>
      </TabItem>
     </TabControl>
    </Border>
   </Grid>
-  <Border x:Name="PlaybackControls" Grid.Row="2" Background="#131B29" BorderBrush="#26344B" BorderThickness="1" CornerRadius="12" Padding="16,12" Margin="0,16,0,0">
+  <Border x:Name="PlaybackControls" Grid.Row="2" Background="{StaticResource PlayerPanel}" BorderBrush="#454F48" BorderThickness="1" CornerRadius="12" Padding="16,12" Margin="0,16,0,0">
    <StackPanel>
-    <DockPanel Margin="0,0,0,4"><TextBlock x:Name="PositionText" Text="00:00 / 00:00" DockPanel.Dock="Right" Foreground="#91A0B7" FontSize="11" Margin="16,0,0,0" VerticalAlignment="Center"/><Slider x:Name="Seek" Minimum="0" Maximum="1000" IsEnabled="False" ValueChanged="Seek_Changed" ToolTip="Seek"/></DockPanel>
+    <DockPanel Margin="0,0,0,4"><TextBlock x:Name="PositionText" Text="00:00 / 00:00" DockPanel.Dock="Right" Foreground="#A1ABA6" FontSize="11" Margin="16,0,0,0" VerticalAlignment="Center"/><Slider x:Name="Seek" Minimum="0" Maximum="1000" IsEnabled="False" ValueChanged="Seek_Changed" ToolTip="Seek"/></DockPanel>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-     <StackPanel VerticalAlignment="Center"><TextBlock x:Name="NowPlayingTitle" Text="Ready when you are" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" MaxWidth="300" HorizontalAlignment="Left"/><TextBlock x:Name="NowPlayingKind" Text="OPEN A VIDEO OR CONNECT A SOURCE" Foreground="#7F90AA" FontSize="9" Margin="0,4,0,0"/></StackPanel>
+     <StackPanel VerticalAlignment="Center"><TextBlock x:Name="NowPlayingTitle" Text="Ready when you are" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" MaxWidth="300" HorizontalAlignment="Left"/><TextBlock x:Name="NowPlayingKind" Text="OPEN A VIDEO OR CONNECT A SOURCE" Foreground="#87958D" FontSize="9" Margin="0,4,0,0"/></StackPanel>
      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
       <Button x:Name="PreviousButton" Content="&#xE892;" Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Previous video" AutomationProperties.Name="Previous video"/>
-      <Button x:Name="PauseButton" Content="&#xE768;" Style="{StaticResource IconButton}" Click="Pause_Click" Width="44" Height="44" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause" IsEnabled="False"/>
+      <Button x:Name="PauseButton" Content="&#xE768;" Style="{StaticResource PlayHeroButton}" Click="Pause_Click" ToolTip="Play / Pause" AutomationProperties.Name="Play or pause" IsEnabled="False"/>
       <Button x:Name="StopButton" Content="&#xE71A;" Style="{StaticResource IconButton}" Click="Stop_Click" ToolTip="Stop" AutomationProperties.Name="Stop" IsEnabled="False"/>
       <Button x:Name="NextButton" Content="&#xE893;" Style="{StaticResource IconButton}" Click="Next_Click" ToolTip="Next video" AutomationProperties.Name="Next video"/>
      </StackPanel>
      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
       <StackPanel>
-       <DockPanel><TextBlock Text="Video" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=Volume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/></DockPanel>
-       <DockPanel><TextBlock Text="Reading" Width="44" Foreground="#91A0B7" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=SpeechVolume, StringFormat={}{0:0}%}" Width="34" Foreground="#91A0B7" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="SpeechVolume" Width="100" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/></DockPanel>
+       <DockPanel><TextBlock Text="Video" Width="44" Foreground="#A1ABA6" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=Volume, StringFormat={}{0:0}%}" Width="34" Foreground="#A1ABA6" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" ValueChanged="Volume_Changed" ToolTip="Video sound volume" AutomationProperties.Name="Video volume"/></DockPanel>
+       <DockPanel><TextBlock Text="Reading" Width="44" Foreground="#A1ABA6" FontSize="10" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text="{Binding Value, ElementName=SpeechVolume, StringFormat={}{0:0}%}" Width="34" Foreground="#A1ABA6" FontSize="10" TextAlignment="Right" VerticalAlignment="Center"/><Slider x:Name="SpeechVolume" Width="100" Minimum="0" Maximum="100" Value="85" ValueChanged="SpeechVolume_Changed" ToolTip="Subtitle reading volume" AutomationProperties.Name="Reading volume"/></DockPanel>
       </StackPanel>
       <Button x:Name="FullscreenButton" Content="&#xE740;" Style="{StaticResource IconButton}" Click="Fullscreen_Click" ToolTip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen" Margin="12,0,0,0"/>
      </StackPanel>
     </Grid>
-    <TextBlock x:Name="Status" Text="Ready — select a capture device or open a movie." Foreground="#7F90AA" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,9,0,0"/>
+    <TextBlock x:Name="Status" Text="Ready — select a capture device or open a movie." Foreground="#87958D" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,9,0,0"/>
    </StackPanel>
   </Border>
  </Grid>
