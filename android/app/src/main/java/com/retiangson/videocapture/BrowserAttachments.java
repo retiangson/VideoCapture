@@ -95,6 +95,7 @@ final class BrowserAttachments {
     ClipData clip = clipboard.getPrimaryClip();
     if (clip == null || clip.getItemCount() == 0) return null;
     Uri uri = clip.getItemAt(0).getUri();
+    if (GalleryFrames.isPublishedFrame(activity, uri)) return uri;
     if (uri == null
         || !"content".equals(uri.getScheme())
         || !(activity.getPackageName() + ".files").equals(uri.getAuthority())

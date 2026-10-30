@@ -45,17 +45,17 @@ final class Ui {
     b.setText(value);
     b.setAllCaps(false);
     b.setTextSize(12);
-    b.setTextColor(0xffe8eef7);
+    b.setTextColor(PlayerSkin.TEXT);
     b.setMinHeight(dp(c, 48));
     b.setMinimumHeight(dp(c, 48));
     b.setPadding(dp(c, 10), dp(c, 4), dp(c, 10), dp(c, 4));
     android.graphics.drawable.StateListDrawable states =
         new android.graphics.drawable.StateListDrawable();
-    GradientDrawable active = panel(0xff245548, dp(c, 9));
-    active.setStroke(dp(c, 2), 0xff5ce0c1);
+    GradientDrawable active = PlayerSkin.surface(dp(c, 7), true);
+    active.setStroke(dp(c, 2), PlayerSkin.ACCENT);
     GradientDrawable mark = new GradientDrawable();
     mark.setShape(GradientDrawable.OVAL);
-    mark.setColor(0xff5ce0c1);
+    mark.setColor(PlayerSkin.ACCENT);
     android.graphics.drawable.LayerDrawable selected =
         new android.graphics.drawable.LayerDrawable(
             new android.graphics.drawable.Drawable[] {active, mark});
@@ -63,7 +63,7 @@ final class Ui {
     selected.setLayerGravity(1, android.view.Gravity.RIGHT | android.view.Gravity.BOTTOM);
     selected.setLayerInset(1, dp(c, 4), dp(c, 4), dp(c, 4), dp(c, 4));
     states.addState(new int[] {android.R.attr.state_selected}, selected);
-    states.addState(new int[] {}, panel(0xff253246, dp(c, 9)));
+    states.addState(new int[] {}, PlayerSkin.surface(dp(c, 7), false));
     b.setBackground(
         new android.graphics.drawable.RippleDrawable(
             android.content.res.ColorStateList.valueOf(0x28ffffff), states, null));
@@ -122,7 +122,7 @@ final class Ui {
   }
 
   static SeekBar slider(Context c, float value, Level action) {
-    SeekBar s = new SeekBar(c);
+    SeekBar s = new PlayerSeekBar(c);
     s.setMinHeight(dp(c, 48));
     s.setMax(1000);
     s.setProgress(Math.round(value * 1000));

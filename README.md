@@ -326,3 +326,6 @@ dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-cec
 ```
 
 Browser microphone verification: `dotnet run --project tests/VideoCapture.Smoke -c Release -- --test-browser-microphone artifacts/browser-microphone-smoke` checks exact origins, old-denial recovery, a real live audio track, camera denial and an untrusted origin. Fixture pages are served in memory, microphone tracks are stopped immediately, and no microphone audio is sent or saved.
+
+
+The Windows and Android players share a charcoal/green control design with metal-style buttons, a prominent play/pause control and green progress/volume faders. Video and reading volumes remain separate; fullscreen controls use the same visual language and active-state indicators. Android 0.3.0 also adds a saved rotation lock and Gallery-backed frame copying: every copied frame is saved to Pictures/VideoCapture before its published image URI enters the clipboard.

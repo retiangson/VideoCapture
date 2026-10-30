@@ -66,7 +66,7 @@ final class BrowserOverlay extends LinearLayout {
     attachments = new BrowserAttachments(activity, host::chooseFiles, host::feedback);
     setOrientation(VERTICAL);
     setPadding(Ui.dp(activity, 8), Ui.dp(activity, 6), Ui.dp(activity, 8), Ui.dp(activity, 6));
-    setBackground(Ui.panel(0xff18212c, Ui.dp(activity, 12)));
+    setBackground(PlayerSkin.surface(Ui.dp(activity, 12), false));
     setElevation(Ui.dp(activity, 12));
     setAlpha(Math.max(.3f, store.level("browserOpacity", 1)));
     LinearLayout title = Ui.row(activity);

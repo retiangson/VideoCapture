@@ -28,7 +28,7 @@
      <Button x:Name="AudioTextButton" Click="AudioText_Click" ToolTipService.ShowOnDisabled="True" ToolTip="Show or hide audio transcription"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/><TextBlock x:Name="AudioTextLabel" Text="Audio to text"/></StackPanel></Button>
      <TextBlock x:Name="VideoRecordingTime" Foreground="#FF91AC" VerticalAlignment="Center" Margin="5,0,0,0"/>
     </WrapPanel>
-    <TextBlock x:Name="VideoFeedback" Text="Video only · browser and other windows are excluded" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="2,6,2,0"/>
+    <TextBlock x:Name="VideoFeedback" Text="Video only · browser and other windows are excluded" Foreground="#A1ABA6" FontSize="10" TextWrapping="Wrap" Margin="2,6,2,0"/>
     <Expander x:Name="TranscriptPanel" Visibility="Collapsed" Header="Audio transcript" Foreground="#C1CEDD" FontSize="11" Margin="2,6,2,0" Expanded="TranscriptPanel_Expanded" Collapsed="TranscriptPanel_Collapsed"><StackPanel Margin="0,6,0,0">
      <WrapPanel>
       <ComboBox x:Name="TranscriptSource" Width="150" Height="28" MinHeight="28" Margin="0,0,6,5" SelectedIndex="0" SelectionChanged="TranscriptSource_Changed" ToolTip="Audio source for transcription"><ComboBoxItem Content="Video audio"/><ComboBoxItem Content="Microphone"/></ComboBox>
@@ -39,11 +39,11 @@
       <Button x:Name="CancelAudioButton" Content="Cancel" IsEnabled="False" Click="CancelAudio_Click" MinHeight="28" Padding="8,4" Margin="0,0,0,5"/>
      </WrapPanel>
      <StackPanel x:Name="MicrophoneFeedbackPanel" Visibility="Collapsed" Margin="0,0,0,6">
-      <DockPanel><Button Content="Input settings" DockPanel.Dock="Right" Click="MicrophoneSettings_Click" MinHeight="22" Padding="5,2" Margin="6,0,0,0" FontSize="10" ToolTip="Choose your default microphone, input volume, and test the input in Windows"/><TextBlock Text="Microphone input" Foreground="#91A0B7" FontSize="10" Margin="0,0,8,0"/><ProgressBar x:Name="MicrophoneLevel" Minimum="0" Maximum="100" Height="7" VerticalAlignment="Center" ToolTip="Live microphone input level from WASAPI"/></DockPanel>
-      <TextBlock x:Name="MicrophonePreview" TextWrapping="Wrap" MaxHeight="48" Foreground="#5CE0C1" FontSize="11" Margin="0,4,0,0"/>
+      <DockPanel><Button Content="Input settings" DockPanel.Dock="Right" Click="MicrophoneSettings_Click" MinHeight="22" Padding="5,2" Margin="6,0,0,0" FontSize="10" ToolTip="Choose your default microphone, input volume, and test the input in Windows"/><TextBlock Text="Microphone input" Foreground="#A1ABA6" FontSize="10" Margin="0,0,8,0"/><ProgressBar x:Name="MicrophoneLevel" Minimum="0" Maximum="100" Height="7" VerticalAlignment="Center" ToolTip="Live microphone input level from WASAPI"/></DockPanel>
+      <TextBlock x:Name="MicrophonePreview" TextWrapping="Wrap" MaxHeight="48" Foreground="#25E685" FontSize="11" Margin="0,4,0,0"/>
      </StackPanel>
-     <TextBox x:Name="TranscriptText" Height="75" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#172236" Foreground="#E8EEF7" BorderBrush="#344157" Padding="6" FontSize="12" TextChanged="TranscriptText_Changed" ToolTip="Review and correct the transcript, then copy it"/>
-     <TextBlock x:Name="TranscriptStatus" Text="Offline transcription · Whisper for microphone · up to 2 minutes" Foreground="#91A0B7" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
+     <TextBox x:Name="TranscriptText" Height="75" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#202622" Foreground="#EEF3EF" BorderBrush="#3E4842" Padding="6" FontSize="12" TextChanged="TranscriptText_Changed" ToolTip="Review and correct the transcript, then copy it"/>
+     <TextBlock x:Name="TranscriptStatus" Text="Offline transcription · Whisper for microphone · up to 2 minutes" Foreground="#A1ABA6" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
     </StackPanel></Expander>
    </StackPanel></Border>
    <Expander x:Name="NavigationPanel" Grid.Row="3" Header="Navigation · address and history" Foreground="#C1CEDD" FontSize="11" Margin="2,6,2,6">

@@ -146,11 +146,13 @@ public final class AndroidParityTests {
       InstrumentationRegistry.getInstrumentation()
           .runOnMainSync(() -> target.get().getLocationOnScreen(at));
       for (boolean expected : new boolean[] {true, false}) {
+        long gesture = SystemClock.uptimeMillis();
         for (int tap = 0; tap < 2; tap++) {
-          long down = SystemClock.uptimeMillis();
+          // Explicit touch timestamps keep this an 80 ms double tap even if emulator rendering
+          // stalls.
+          long down = gesture + tap * 80;
           pointer(down, down, MotionEvent.ACTION_DOWN, at[0] + 400, at[1] + 200);
-          pointer(
-              down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, at[0] + 400, at[1] + 200);
+          pointer(down, down + 30, MotionEvent.ACTION_UP, at[0] + 400, at[1] + 200);
           SystemClock.sleep(80);
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();

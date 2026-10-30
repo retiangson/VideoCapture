@@ -28,7 +28,7 @@ final class SourceChooser extends LinearLayout {
     LinearLayout actions = Ui.row(context);
     Button select = Ui.button(context, "Select USB", usb);
     select.setContentDescription("Select USB capture device");
-    select.setBackground(Ui.panel(0xff245548, Ui.dp(context, 9)));
+    select.setBackground(PlayerSkin.surface(Ui.dp(context, 9), true));
     Button open = Ui.button(context, "Open video", file);
     LayoutParams first = new LayoutParams(0, Ui.dp(context, 48), 1);
     first.setMargins(0, 0, Ui.dp(context, 4), 0);

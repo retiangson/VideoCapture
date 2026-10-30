@@ -72,6 +72,93 @@ public final class ResponsiveLayoutTests {
   }
 
   @Test
+  public void rotationLockRetainsStateAndReturnsControlToAndroid() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            Button lock = button((View) field(a, "menu"), "Lock rotation");
+            assertNotNull(lock);
+            assertFalse(lock.isSelected());
+            lock.performClick();
+            assertTrue(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED,
+                a.getRequestedOrientation());
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            Button lock = button((View) field(a, "menu"), "Lock rotation");
+            assertTrue(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED,
+                a.getRequestedOrientation());
+            lock.performClick();
+            assertFalse(lock.isSelected());
+            assertEquals(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                a.getRequestedOrientation());
+            assertEquals("false", ((PlayerStore) field(a, "store")).text("rotationLocked", "true"));
+          });
+    }
+  }
+
+  @Test
+  public void playerLevelsJumpOnTapAndRetainIndependentVolumes() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      idle();
+      scenario.onActivity(
+          a -> {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, SeekBar> levels =
+                (java.util.Map<String, SeekBar>) field(a, "levelSliders");
+            PlayerStore store = (PlayerStore) field(a, "store");
+            tapLevel(levels.get("Video"), .8f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            assertEquals(.85f, (float) field(a, "readingVolume"), .001f);
+            tapLevel(levels.get("Reading"), .25f);
+            assertEquals(.25f, store.level("readingVolume", 0), .02f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            tapLevel(levels.get("Opacity"), 0);
+            assertEquals(.35f, ((View) field(a, "menu")).getAlpha(), .001f);
+            SeekBar video = levels.get("Video");
+            video.setEnabled(false);
+            tapLevel(video, .1f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+            video.setEnabled(true);
+            video.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            tapLevel(video, .2f);
+            assertEquals(.8f, store.level("videoVolume", 0), .02f);
+          });
+      scenario.recreate();
+      idle();
+      scenario.onActivity(
+          a -> {
+            assertEquals(.8f, (float) field(a, "videoVolume"), .02f);
+            assertEquals(.25f, (float) field(a, "readingVolume"), .02f);
+            assertEquals(.35f, ((View) field(a, "menu")).getAlpha(), .001f);
+          });
+    }
+  }
+
+  private static void tapLevel(SeekBar slider, float fraction) {
+    float x =
+        slider.getPaddingLeft()
+            + fraction * (slider.getWidth() - slider.getPaddingLeft() - slider.getPaddingRight());
+    long now = SystemClock.uptimeMillis();
+    android.view.MotionEvent down =
+        android.view.MotionEvent.obtain(now, now, 0, x, slider.getHeight() / 2f, 0);
+    android.view.MotionEvent up =
+        android.view.MotionEvent.obtain(now, now + 60, 1, x, slider.getHeight() / 2f, 0);
+    slider.dispatchTouchEvent(down);
+    slider.dispatchTouchEvent(up);
+    down.recycle();
+    up.recycle();
+  }
+
+  @Test
   public void startupShowsSourceActionsAndWindowedControls() throws Exception {
     try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
       idle();

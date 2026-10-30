@@ -17,7 +17,6 @@ import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.OptIn;
-import androidx.core.content.FileProvider;
 import androidx.core.view.*;
 import androidx.media3.common.*;
 import androidx.media3.common.text.Cue;
@@ -45,6 +44,8 @@ public final class MainActivity extends ComponentActivity {
   private FrameLayout root, videoLayer;
   private final Map<Button, java.util.function.BooleanSupplier> toggleStates =
       new LinkedHashMap<>();
+  private final Map<String, SeekBar> levelSliders = new LinkedHashMap<>();
+  private final Map<String, TextView> levelCaptions = new LinkedHashMap<>();
   private long previewFrames, previewStamp, previewCount;
   private String liveCaption = "LIVE";
   private PlayerView playerView;
@@ -52,7 +53,7 @@ public final class MainActivity extends ComponentActivity {
   private View gesturesView;
   private LinearLayout menu, audioPanel;
   private SourceChooser sourceChooser;
-  private TextView status, position, transcriptStatus;
+  private TextView status, position, transcriptStatus, mediaTitle;
   private EditText transcript;
   private SeekBar seek;
   private ProgressBar levelMeter;
@@ -70,7 +71,14 @@ public final class MainActivity extends ComponentActivity {
   private UsbCapture usb;
   private Surface usbSurface;
   private Size captureSize;
-  private boolean wantLive, live, closed, fullscreen = false, reading, busy, ocrBusy;
+  private boolean wantLive,
+      live,
+      closed,
+      fullscreen = false,
+      reading,
+      busy,
+      ocrBusy,
+      rotationLocked;
   private volatile boolean foreground = true;
   private volatile int audioJob;
   private boolean usbRetiring, restoredMode;
@@ -122,6 +130,9 @@ public final class MainActivity extends ComponentActivity {
                         result.getResultCode(), result.getData()));
             });
     store = new PlayerStore(this);
+    rotationLocked = Boolean.parseBoolean(store.text("rotationLocked", "false"));
+    if (rotationLocked)
+      setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
     videoVolume = store.level("videoVolume", .75f);
     reading = Boolean.parseBoolean(store.text("reading", "false"));
     readingVolume = store.level("readingVolume", .85f);
@@ -210,7 +221,7 @@ public final class MainActivity extends ComponentActivity {
             return super.dispatchGenericMotionEvent(event);
           }
         };
-    root.setBackgroundColor(0xff0b1019);
+    root.setBackgroundColor(0xff111514);
     root.addOnLayoutChangeListener(
         (v, l, t, r, b, ol, ot, or, ob) -> {
           if (browser != null) browser.layoutWithinParent();
@@ -316,15 +327,16 @@ public final class MainActivity extends ComponentActivity {
     PlayerControls controls = new PlayerControls(this);
     menu = controls;
     LinearLayout menuBody = controls.content;
-    menu.setPadding(dp(14), dp(10), dp(14), dp(10));
-    menu.setBackground(Ui.panel(0xf5131b29, dp(14)));
+    menu.setPadding(dp(10), dp(8), dp(10), dp(10));
+    menu.setBackground(PlayerSkin.surface(dp(16), false));
     menu.setAlpha(Math.max(.35f, store.level("menuOpacity", .96f)));
     FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-    mp.setMargins(dp(18), 0, dp(18), dp(18));
+    mp.setMargins(dp(12), 0, dp(12), dp(12));
     root.addView(menu, mp);
     menu.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutSourceChooser());
     LinearLayout top = Ui.row(this);
-    TextView grip = Ui.text(this, "⋮⋮  VideoCapture", 14, 0xffe8eef7);
+    TextView grip = Ui.text(this, "⋮⋮  VIDEOCAPTURE", 11, PlayerSkin.MUTED);
+    grip.setLetterSpacing(.12f);
     top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
     fullscreenButton = Ui.button(this, "Fullscreen", () -> setFullscreen(!fullscreen));
     top.addView(fullscreenButton);
@@ -362,7 +374,14 @@ public final class MainActivity extends ComponentActivity {
           }
         });
     LinearLayout progress = Ui.row(this);
-    seek = new SeekBar(this);
+    mediaTitle = Ui.text(this, "READY TO PLAY", 13, PlayerSkin.TEXT);
+    mediaTitle.setSingleLine(true);
+    mediaTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    mediaTitle.setGravity(Gravity.CENTER);
+    mediaTitle.setPadding(dp(8), dp(8), dp(8), dp(4));
+    menuBody.addView(mediaTitle);
+    seek = new PlayerSeekBar(this);
+    seek.setContentDescription("Video progress");
     seek.setMax(1000);
     progress.addView(seek, new LinearLayout.LayoutParams(0, dp(48), 1));
     position = Ui.text(this, "00:00 / 00:00", 11, 0xff91a0b7);
@@ -388,13 +407,26 @@ public final class MainActivity extends ComponentActivity {
     actions.addView(Ui.button(this, "USB", this::chooseUsb));
     LinearLayout transport = Ui.row(this);
     transport.setGravity(Gravity.CENTER);
-    transport.addView(Ui.iconButton(this, "‹", "Previous video", () -> playIndex(selected - 1)));
-    playButton = Ui.iconButton(this, "▶ / Ⅱ", "Play or pause video", this::playPause);
+    transport.setPadding(dp(6), dp(6), dp(6), dp(6));
+    transport.setBackground(PlayerSkin.surface(dp(36), false));
+    transport.addView(
+        PlayerSkin.transport(this, PlayerSkin.Icon.Kind.STOP, "Stop video", this::stop, false));
+    transport.addView(
+        PlayerSkin.transport(
+            this,
+            PlayerSkin.Icon.Kind.PREVIOUS,
+            "Previous video",
+            () -> playIndex(selected - 1),
+            false));
+    playButton =
+        PlayerSkin.transport(this, PlayerSkin.Icon.Kind.PLAY, "Play video", this::playPause, true);
     transport.addView(playButton);
-    transport.addView(Ui.iconButton(this, "■", "Stop video", this::stop));
-    transport.addView(Ui.iconButton(this, "›", "Next video", () -> playIndex(selected + 1)));
-    recordButton = Ui.iconButton(this, "●", "Record video", this::record);
-    recordButton.setTextColor(0xfffb7185);
+    transport.addView(
+        PlayerSkin.transport(
+            this, PlayerSkin.Icon.Kind.NEXT, "Next video", () -> playIndex(selected + 1), false));
+    recordButton =
+        PlayerSkin.transport(
+            this, PlayerSkin.Icon.Kind.RECORD, "Record video", this::record, false);
     transport.addView(recordButton);
     menuBody.addView(transport);
     actions.addView(Ui.button(this, "▣ Copy frame", () -> frame(false)));
@@ -408,6 +440,18 @@ public final class MainActivity extends ComponentActivity {
     pictureModeButton =
         Ui.button(this, "Picture: " + PictureMode.read(store).label, this::choosePictureMode);
     more.addView(pictureModeButton);
+    addToggle(
+        more,
+        "Lock rotation",
+        () -> rotationLocked,
+        () -> {
+          rotationLocked = !rotationLocked;
+          setRequestedOrientation(
+              rotationLocked
+                  ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                  : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+          store.put("rotationLocked", Boolean.toString(rotationLocked));
+        });
     addToggle(
         more,
         "Browser",
@@ -502,6 +546,9 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void updateToggleStates() {
+    updateLevel("Video", videoVolume);
+    updateLevel("Reading", readingVolume);
+    updateLevel("Opacity", menu.getAlpha());
     for (Map.Entry<Button, java.util.function.BooleanSupplier> entry : toggleStates.entrySet())
       Ui.active(entry.getKey(), entry.getValue().getAsBoolean());
     if (pictureModeButton != null) {
@@ -511,7 +558,14 @@ public final class MainActivity extends ComponentActivity {
       Ui.active(pictureModeButton, mode != PictureMode.REGULAR, mode.label);
     }
     Ui.active(fullscreenButton, fullscreen);
-    Ui.active(playButton, player != null && !live && player.isPlaying());
+    boolean playing = player != null && !live && player.isPlaying();
+    Ui.active(playButton, playing);
+    PlayerSkin.icon(
+        playButton, playing ? PlayerSkin.Icon.Kind.PAUSE : PlayerSkin.Icon.Kind.PLAY, 30);
+    playButton.setContentDescription(playing ? "Pause video" : "Play video");
+    playButton.setEnabled(player != null && !live);
+    String title = live ? "USB CAPTURE" : fileUri != null ? name(fileUri) : "READY TO PLAY";
+    if (!title.contentEquals(mediaTitle.getText())) mediaTitle.setText(title);
     boolean recording = recorder != null || pendingLocalClip != null;
     Ui.active(recordButton, recording);
     Ui.active(audioStart, audioCapturing || transcribing);
@@ -555,11 +609,42 @@ public final class MainActivity extends ComponentActivity {
 
   private void addLevel(LinearLayout row, String label, float value, Ui.Level changed) {
     LinearLayout box = Ui.column(this);
-    box.addView(Ui.text(this, label, 10, 0xff91a0b7));
-    SeekBar slider = Ui.slider(this, value, changed);
+    box.setPadding(dp(6), dp(8), dp(6), dp(2));
+    box.setBackground(PlayerSkin.surface(dp(8), false));
+    TextView caption =
+        Ui.text(
+            this,
+            label.toUpperCase(Locale.ROOT) + "  " + Math.round(value * 100) + "%",
+            10,
+            PlayerSkin.MUTED);
+    caption.setSingleLine(true);
+    box.addView(caption);
+    SeekBar slider =
+        Ui.slider(
+            this,
+            value,
+            v -> {
+              caption.setText(label.toUpperCase(Locale.ROOT) + "  " + Math.round(v * 100) + "%");
+              changed.changed(v);
+            });
+    slider.setContentDescription(label + " level");
     if ("Opacity".equals(label)) slider.setMin(350);
+    levelSliders.put(label, slider);
+    levelCaptions.put(label, caption);
     box.addView(slider);
-    row.addView(box, new LinearLayout.LayoutParams(0, -2, 1));
+    LinearLayout.LayoutParams bounds = new LinearLayout.LayoutParams(0, -2, 1);
+    bounds.setMargins(dp(2), dp(8), dp(2), 0);
+    row.addView(box, bounds);
+  }
+
+  private void updateLevel(String label, float value) {
+    SeekBar slider = levelSliders.get(label);
+    if (slider == null) return;
+    int progress = Math.round(value * 1000);
+    if (slider.getProgress() != progress) slider.setProgress(progress);
+    String text = label.toUpperCase(Locale.ROOT) + "  " + Math.round(value * 100) + "%";
+    TextView caption = levelCaptions.get(label);
+    if (!text.contentEquals(caption.getText())) caption.setText(text);
   }
 
   private boolean adjustWheel(MotionEvent e) {
@@ -1552,62 +1637,28 @@ public final class MainActivity extends ComponentActivity {
     }
     io.execute(
         () -> {
-          Uri pendingImage = null;
-          File copiedFrame = null;
           try {
-            if (save) {
-              ContentValues values = new ContentValues();
-              values.put(
-                  MediaStore.Images.Media.DISPLAY_NAME,
-                  "Frame-" + System.currentTimeMillis() + ".png");
-              values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-              values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/VideoCapture");
-              values.put(MediaStore.Images.Media.IS_PENDING, 1);
-              Uri uri =
-                  getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-              if (uri == null) throw new IOException("Could not save frame.");
-              pendingImage = uri;
-              try (OutputStream output = getContentResolver().openOutputStream(uri)) {
-                if (output == null || !image.compress(Bitmap.CompressFormat.PNG, 100, output))
-                  throw new IOException("Frame save failed.");
-              }
-              values.clear();
-              values.put(MediaStore.Images.Media.IS_PENDING, 0);
-              getContentResolver().update(uri, values, null, null);
-              message("Frame saved to Pictures/VideoCapture.");
-            } else {
-              File directory = new File(getCacheDir(), "frames");
-              directory.mkdirs();
-              File[] old =
-                  directory.listFiles(
-                      (folder, name) -> name.startsWith("frame-") && name.endsWith(".png"));
-              if (old != null && old.length > 10) {
-                Arrays.sort(old, Comparator.comparingLong(File::lastModified));
-                for (int i = 0; i < old.length - 10; i++) old[i].delete();
-              }
-              File png = new File(directory, "frame-" + UUID.randomUUID() + ".png");
-              copiedFrame = png;
-              try (OutputStream output = new FileOutputStream(png)) {
-                if (!image.compress(Bitmap.CompressFormat.PNG, 100, output))
-                  throw new IOException("Frame copy failed.");
-              }
-              Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", png);
-              main.post(
-                  () -> {
-                    ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
-                        .setPrimaryClip(ClipData.newUri(getContentResolver(), "Video frame", uri));
-                    message(
-                        "Frame copied. In the browser, tap Attach / Upload, then Copied frame.");
-                  });
-            }
+            Uri uri = GalleryFrames.save(getApplicationContext(), image);
+            main.post(
+                () -> {
+                  if (closed) return;
+                  if (!save) {
+                    try {
+                      GalleryFrames.copy(MainActivity.this, uri);
+                    } catch (RuntimeException error) {
+                      message(
+                          "Frame saved to Gallery, but clipboard copy failed: "
+                              + error.getMessage());
+                      return;
+                    }
+                  }
+                  message(
+                      save
+                          ? "Frame saved to Pictures/VideoCapture."
+                          : "Frame saved to Gallery and copied. Paste it into the browser.");
+                });
           } catch (Exception error) {
-            if (pendingImage != null)
-              try {
-                getContentResolver().delete(pendingImage, null, null);
-              } catch (Exception ignored) {
-              }
-            if (copiedFrame != null) copiedFrame.delete();
-            message(error.getMessage());
+            message("Frame capture: " + error.getMessage());
           } finally {
             image.recycle();
           }

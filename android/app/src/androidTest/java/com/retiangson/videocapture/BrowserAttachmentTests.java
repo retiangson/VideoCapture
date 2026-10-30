@@ -9,9 +9,9 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.util.Base64;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.webkit.*;
-import androidx.core.content.FileProvider;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -77,27 +77,26 @@ public final class BrowserAttachmentTests {
       AtomicReference<BrowserAttachments> attachments = new AtomicReference<>();
       AtomicReference<String> expected = new AtomicReference<>();
       AtomicReference<ClipData> previous = new AtomicReference<>();
+      AtomicReference<Uri> saved = new AtomicReference<>();
       scenario.onActivity(
           a -> {
             try {
               ClipboardManager clipboard = a.getSystemService(ClipboardManager.class);
               previous.set(clipboard.getPrimaryClip());
-              File dir = new File(a.getCacheDir(), "frames");
-              assertTrue(dir.isDirectory() || dir.mkdirs());
-              File frame = new File(dir, "frame-upload-test.png");
               Bitmap bitmap = Bitmap.createBitmap(12, 8, Bitmap.Config.ARGB_8888);
               bitmap.eraseColor(0xff278ad5);
-              try (OutputStream output = new FileOutputStream(frame)) {
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
+              try {
+                ByteArrayOutputStream png = new ByteArrayOutputStream();
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, png));
+                expected.set(
+                    "data:image/png;base64,"
+                        + Base64.encodeToString(png.toByteArray(), Base64.NO_WRAP));
+                Uri uri = GalleryFrames.save(a, bitmap);
+                saved.set(uri);
+                GalleryFrames.copy(a, uri);
               } finally {
                 bitmap.recycle();
               }
-              expected.set(
-                  "data:image/png;base64,"
-                      + Base64.encodeToString(
-                          java.nio.file.Files.readAllBytes(frame.toPath()), Base64.NO_WRAP));
-              Uri uri = FileProvider.getUriForFile(a, a.getPackageName() + ".files", frame);
-              clipboard.setPrimaryClip(ClipData.newUri(a.getContentResolver(), "Frame", uri));
               Method open = MainActivity.class.getDeclaredMethod("toggleBrowserPanel");
               open.setAccessible(true);
               open.invoke(a);
@@ -173,6 +172,91 @@ public final class BrowserAttachmentTests {
               ClipboardManager clipboard = a.getSystemService(ClipboardManager.class);
               if (previous.get() == null) clipboard.clearPrimaryClip();
               else clipboard.setPrimaryClip(previous.get());
+              if (saved.get() != null) a.getContentResolver().delete(saved.get(), null, null);
+            });
+      }
+    }
+  }
+
+  @Test
+  public void galleryFramePastesReadablePngIntoWebEditor() throws Exception {
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+      AtomicReference<WebView> page = new AtomicReference<>();
+      AtomicReference<Uri> saved = new AtomicReference<>();
+      AtomicReference<ClipData> previous = new AtomicReference<>();
+      AtomicReference<String> expected = new AtomicReference<>();
+      scenario.onActivity(
+          a -> {
+            try {
+              ClipboardManager clipboard = a.getSystemService(ClipboardManager.class);
+              previous.set(clipboard.getPrimaryClip());
+              Bitmap image = Bitmap.createBitmap(24, 16, Bitmap.Config.ARGB_8888);
+              image.eraseColor(0xff25e685);
+              try {
+                ByteArrayOutputStream png = new ByteArrayOutputStream();
+                assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, png));
+                expected.set(
+                    "data:image/png;base64,"
+                        + Base64.encodeToString(png.toByteArray(), Base64.NO_WRAP));
+                saved.set(GalleryFrames.save(a, image));
+              } finally {
+                image.recycle();
+              }
+              assertTrue(GalleryFrames.isPublishedFrame(a, saved.get()));
+              GalleryFrames.copy(a, saved.get());
+              assertTrue(clipboard.getPrimaryClipDescription().hasMimeType("image/png"));
+              Method open = MainActivity.class.getDeclaredMethod("toggleBrowserPanel");
+              open.setAccessible(true);
+              open.invoke(a);
+              BrowserOverlay browser = (BrowserOverlay) field(a, "browser");
+              Method current = BrowserOverlay.class.getDeclaredMethod("current");
+              current.setAccessible(true);
+              page.set((WebView) current.invoke(browser));
+              page.get().stopLoading();
+              page.get()
+                  .loadDataWithBaseURL(
+                      "https://paste.test/",
+                      """
+                      <meta name='viewport' content='width=device-width,initial-scale=1'>
+                      <div id='editor' contenteditable='true' style='height:100px'>Paste image here</div>
+                      <script>
+                      window.ready=true;window.result='';window.files=0;
+                      document.addEventListener('paste',e=>{
+                        window.files=e.clipboardData.files.length;
+                        const f=e.clipboardData.files[0];if(!f)return;
+                        const r=new FileReader();r.onload=()=>{window.result=r.result};r.readAsDataURL(f);
+                        e.preventDefault();
+                      });
+                      </script>
+                      """,
+                      "text/html",
+                      "UTF-8",
+                      null);
+            } catch (Exception error) {
+              throw new AssertionError(error);
+            }
+          });
+      try {
+        awaitScript(page.get(), "window.ready===true", "true");
+        scenario.onActivity(a -> page.get().requestFocus());
+        script(page.get(), "editor.focus()");
+        long now = SystemClock.uptimeMillis();
+        int modifiers = KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+        InstrumentationRegistry.getInstrumentation()
+            .sendKeySync(
+                new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_V, 0, modifiers));
+        InstrumentationRegistry.getInstrumentation()
+            .sendKeySync(
+                new KeyEvent(now, now + 60, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_V, 0, modifiers));
+        awaitScript(page.get(), "window.result", org.json.JSONObject.quote(expected.get()));
+        assertEquals("1", script(page.get(), "window.files"));
+      } finally {
+        scenario.onActivity(
+            a -> {
+              ClipboardManager clipboard = a.getSystemService(ClipboardManager.class);
+              if (previous.get() == null) clipboard.clearPrimaryClip();
+              else clipboard.setPrimaryClip(previous.get());
+              if (saved.get() != null) a.getContentResolver().delete(saved.get(), null, null);
             });
       }
     }
