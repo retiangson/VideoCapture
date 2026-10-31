@@ -76,6 +76,12 @@ final class MenuIcons extends Drawable {
     return button;
   }
 
+  static Button compact(Context context, Kind kind, String label, Runnable action) {
+    Button button = Ui.compactIconButton(context, "", label, action);
+    setIcon(button, kind);
+    return button;
+  }
+
   static void setIcon(Button button, Kind kind) {
     if (button.getTag() == kind) return;
     button.setTag(kind);

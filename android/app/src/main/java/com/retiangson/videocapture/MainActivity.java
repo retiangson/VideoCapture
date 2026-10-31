@@ -51,7 +51,8 @@ public final class MainActivity extends ComponentActivity {
   private PlayerView playerView;
   private TextureView usbView;
   private View gesturesView;
-  private LinearLayout menu, audioPanel;
+  private LinearLayout menu, audioPanel, progressRow;
+  private PopupMenu optionsPopup;
   private SourceChooser sourceChooser;
   private TextView status, position, transcriptStatus, mediaTitle, gestureFeedback;
   private EditText transcript;
@@ -63,7 +64,8 @@ public final class MainActivity extends ComponentActivity {
       fullscreenButton,
       rotationLockButton,
       hideMenuButton,
-      pictureModeButton;
+      videoOptionsButton,
+      audioOptionsButton;
   private Spinner audioSource;
   private ExoPlayer player;
   private PlayerStore store;
@@ -417,14 +419,14 @@ public final class MainActivity extends ComponentActivity {
     grip.setEllipsize(android.text.TextUtils.TruncateAt.END);
     top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
     fullscreenButton =
-        MenuIcons.icon(
+        MenuIcons.compact(
             this, MenuIcons.Kind.FULLSCREEN, "Fullscreen", () -> setFullscreen(!fullscreen));
     top.addView(fullscreenButton);
     rotationLockButton =
-        MenuIcons.icon(this, MenuIcons.Kind.UNLOCK, "Lock rotation", this::toggleRotationLock);
+        MenuIcons.compact(this, MenuIcons.Kind.UNLOCK, "Lock rotation", this::toggleRotationLock);
     top.addView(rotationLockButton);
     hideMenuButton =
-        MenuIcons.icon(
+        MenuIcons.compact(
             this,
             MenuIcons.Kind.HIDE,
             "Hide menu",
@@ -458,6 +460,7 @@ public final class MainActivity extends ComponentActivity {
           }
         });
     LinearLayout progress = Ui.row(this);
+    progressRow = progress;
     mediaTitle = Ui.text(this, "READY TO PLAY", 13, PlayerSkin.TEXT);
     mediaTitle.setSingleLine(true);
     mediaTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -485,13 +488,6 @@ public final class MainActivity extends ComponentActivity {
 
           public void onProgressChanged(SeekBar bar, int value, boolean user) {}
         });
-    LinearLayout actions = Ui.row(this);
-    actions.addView(MenuIcons.action(this, "Open", MenuIcons.Kind.OPEN, this::pickFiles));
-    playlistButton = MenuIcons.action(this, "Playlist", MenuIcons.Kind.PLAYLIST, this::playlist);
-    actions.addView(playlistButton);
-    actions.addView(
-        MenuIcons.action(this, "Open folder", MenuIcons.Kind.OPEN, () -> pickFolder(true)));
-    actions.addView(MenuIcons.action(this, "USB", MenuIcons.Kind.USB, this::chooseUsb));
     LinearLayout transport = Ui.row(this);
     transport.setGravity(Gravity.CENTER);
     transport.setPadding(dp(6), dp(6), dp(6), dp(6));
@@ -516,60 +512,21 @@ public final class MainActivity extends ComponentActivity {
             this, PlayerSkin.Icon.Kind.RECORD, "Record video", this::record, false);
     transport.addView(recordButton);
     menuBody.addView(transport);
-    actions.addView(MenuIcons.action(this, "Copy frame", MenuIcons.Kind.FRAME, () -> frame(false)));
-    actions.addView(MenuIcons.action(this, "Save frame", MenuIcons.Kind.SAVE, () -> frame(true)));
-    actions.addView(
-        MenuIcons.action(this, "Copy recording", MenuIcons.Kind.COPY, this::copyRecording));
-    menuBody.addView(Ui.scrollRow(this, actions));
-    LinearLayout more = Ui.row(this);
-    more.addView(MenuIcons.action(this, "Mode / FPS", MenuIcons.Kind.SETTINGS, this::chooseMode));
-    more.addView(MenuIcons.action(this, "Audio input", MenuIcons.Kind.MIC, this::chooseAudio));
-    more.addView(
-        MenuIcons.action(this, "Audio track", MenuIcons.Kind.MUSIC, this::chooseFileAudio));
-    pictureModeButton =
-        MenuIcons.action(
-            this,
-            "Picture: " + PictureMode.read(store).label,
-            MenuIcons.Kind.PICTURE,
-            this::choosePictureMode);
-    more.addView(pictureModeButton);
-    addToggle(
-        more,
-        "Browser",
-        MenuIcons.Kind.BROWSER,
-        () -> browser != null && browser.getVisibility() == View.VISIBLE,
-        this::toggleBrowserPanel);
-    more.addView(
-        MenuIcons.action(this, "Aa Copy text", MenuIcons.Kind.TEXT, () -> recognize(false)));
-    more.addView(
-        MenuIcons.action(this, "Subtitle track", MenuIcons.Kind.SUBTITLE, this::chooseSubtitles));
-    addToggle(more, "Read subtitles", MenuIcons.Kind.READ, () -> reading, this::toggleReading);
-    more.addView(MenuIcons.action(this, "Voice", MenuIcons.Kind.AUDIO, this::chooseVoice));
-    more.addView(MenuIcons.action(this, "Licenses", MenuIcons.Kind.INFO, this::licenses));
-    more.addView(MenuIcons.action(this, "Privacy", MenuIcons.Kind.INFO, this::showPrivacy));
-    addToggle(
-        more,
-        "Audio to text",
-        MenuIcons.Kind.MIC,
-        () ->
-            browser != null
-                && browser.getVisibility() == View.VISIBLE
-                && audioPanel != null
-                && audioPanel.getVisibility() == View.VISIBLE,
-        this::toggleAudioPanel);
-    addToggle(
-        more,
-        "Timeline",
-        MenuIcons.Kind.TIMELINE,
-        () -> progress.getVisibility() == View.VISIBLE,
-        () -> {
-          progress.setVisibility(
-              progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-          store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
-        });
-    more.addView(
-        MenuIcons.action(this, "Brightness", MenuIcons.Kind.BRIGHTNESS, this::chooseBrightness));
-    menuBody.addView(Ui.scrollRow(this, more));
+    LinearLayout sources = Ui.row(this);
+    menuAction(sources, "Source", MenuIcons.Kind.OPEN, this::showSourceOptions);
+    playlistButton = menuAction(sources, "Playlist", MenuIcons.Kind.PLAYLIST, v -> playlist());
+    Button browserButton =
+        menuAction(sources, "Browser", MenuIcons.Kind.BROWSER, v -> toggleBrowserPanel());
+    toggleStates.put(
+        browserButton, () -> browser != null && browser.getVisibility() == View.VISIBLE);
+    menuBody.addView(sources);
+    LinearLayout configuration = Ui.row(this);
+    audioOptionsButton =
+        menuAction(configuration, "Audio", MenuIcons.Kind.AUDIO, this::showAudioOptions);
+    videoOptionsButton =
+        menuAction(configuration, "Video", MenuIcons.Kind.PICTURE, this::showVideoOptions);
+    menuAction(configuration, "More", MenuIcons.Kind.SETTINGS, this::showMoreOptions);
+    menuBody.addView(configuration);
     progress.setVisibility(
         Boolean.parseBoolean(store.text("timeline", "true")) ? View.VISIBLE : View.GONE);
     LinearLayout levels = Ui.row(this);
@@ -604,23 +561,89 @@ public final class MainActivity extends ComponentActivity {
     setFullscreen(false);
   }
 
-  private void addToggle(
-      LinearLayout row,
-      String label,
-      MenuIcons.Kind icon,
-      java.util.function.BooleanSupplier state,
-      Runnable action) {
-    Button button =
-        MenuIcons.action(
-            this,
-            label,
-            icon,
-            () -> {
-              action.run();
-              updateToggleStates();
-            });
-    toggleStates.put(button, state);
-    row.addView(button);
+  private Button menuAction(
+      LinearLayout row, String label, MenuIcons.Kind icon, Consumer<View> action) {
+    Button button = MenuIcons.action(this, label, icon, () -> {});
+    button.setMinWidth(0);
+    button.setMinimumWidth(0);
+    button.setPadding(dp(6), dp(2), dp(6), dp(2));
+    button.setSingleLine(true);
+    button.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    button.setOnClickListener(
+        view -> {
+          action.accept(view);
+          updateToggleStates();
+        });
+    LinearLayout.LayoutParams bounds = new LinearLayout.LayoutParams(0, dp(48), 1);
+    bounds.setMargins(dp(2), dp(2), dp(2), dp(2));
+    row.addView(button, bounds);
+    return button;
+  }
+
+  private void showOptions(View anchor, List<PlayerOptions.Option> options) {
+    if (optionsPopup != null) optionsPopup.dismiss();
+    optionsPopup = PlayerOptions.show(this, anchor, options, this::updateToggleStates);
+  }
+
+  private void showSourceOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Open files", MenuIcons.Kind.OPEN, this::pickFiles),
+            new PlayerOptions.Option("Open folder", MenuIcons.Kind.OPEN, () -> pickFolder(true)),
+            new PlayerOptions.Option("USB capture", MenuIcons.Kind.USB, this::chooseUsb)));
+  }
+
+  private void showAudioOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Audio input", MenuIcons.Kind.MIC, this::chooseAudio),
+            new PlayerOptions.Option("Audio track", MenuIcons.Kind.MUSIC, this::chooseFileAudio),
+            new PlayerOptions.Option(
+                "Subtitle track", MenuIcons.Kind.SUBTITLE, this::chooseSubtitles),
+            new PlayerOptions.Option(
+                "Read subtitles", MenuIcons.Kind.READ, this::toggleReading, reading),
+            new PlayerOptions.Option("Reading voice", MenuIcons.Kind.AUDIO, this::chooseVoice),
+            new PlayerOptions.Option(
+                "Audio to text",
+                MenuIcons.Kind.MIC,
+                this::toggleAudioPanel,
+                browser != null
+                    && browser.getVisibility() == View.VISIBLE
+                    && audioPanel != null
+                    && audioPanel.getVisibility() == View.VISIBLE)));
+  }
+
+  private void showVideoOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option(
+                "Picture: " + PictureMode.read(store).label,
+                MenuIcons.Kind.PICTURE,
+                this::choosePictureMode),
+            new PlayerOptions.Option("Mode / FPS", MenuIcons.Kind.SETTINGS, this::chooseMode),
+            new PlayerOptions.Option(
+                "Timeline",
+                MenuIcons.Kind.TIMELINE,
+                () -> {
+                  progressRow.setVisibility(
+                      progressRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                  store.put(
+                      "timeline", Boolean.toString(progressRow.getVisibility() == View.VISIBLE));
+                },
+                progressRow.getVisibility() == View.VISIBLE),
+            new PlayerOptions.Option(
+                "Brightness", MenuIcons.Kind.BRIGHTNESS, this::chooseBrightness)));
+  }
+
+  private void showMoreOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Licenses", MenuIcons.Kind.INFO, this::licenses),
+            new PlayerOptions.Option("Privacy", MenuIcons.Kind.INFO, this::showPrivacy)));
   }
 
   private void toggleRotationLock() {
@@ -704,12 +727,9 @@ public final class MainActivity extends ComponentActivity {
     updateLevel("Opacity", menu.getAlpha());
     for (Map.Entry<Button, java.util.function.BooleanSupplier> entry : toggleStates.entrySet())
       Ui.active(entry.getKey(), entry.getValue().getAsBoolean());
-    if (pictureModeButton != null) {
-      PictureMode mode = PictureMode.read(store);
-      String label = "Picture: " + mode.label;
-      if (!label.contentEquals(pictureModeButton.getText())) pictureModeButton.setText(label);
-      Ui.active(pictureModeButton, mode != PictureMode.REGULAR, mode.label);
-    }
+    PictureMode mode = PictureMode.read(store);
+    Ui.active(videoOptionsButton, mode != PictureMode.REGULAR, mode.label);
+    Ui.active(audioOptionsButton, reading || audioCapturing || transcribing);
     Ui.active(fullscreenButton, fullscreen);
     Ui.active(rotationLockButton, rotationLocked);
     MenuIcons.setIcon(
@@ -765,8 +785,7 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void addLevel(LinearLayout row, String label, float value, Ui.Level changed) {
-    LinearLayout box = Ui.column(this);
-    box.setPadding(dp(6), dp(8), dp(6), dp(2));
+    FrameLayout box = new FrameLayout(this);
     box.setBackground(PlayerSkin.surface(dp(8), false));
     TextView caption =
         Ui.text(
@@ -775,7 +794,7 @@ public final class MainActivity extends ComponentActivity {
             10,
             PlayerSkin.MUTED);
     caption.setSingleLine(true);
-    box.addView(caption);
+    caption.setPadding(dp(6), dp(2), dp(6), 0);
     SeekBar slider =
         Ui.slider(
             this,
@@ -788,9 +807,11 @@ public final class MainActivity extends ComponentActivity {
     if ("Opacity".equals(label)) slider.setMin(350);
     levelSliders.put(label, slider);
     levelCaptions.put(label, caption);
-    box.addView(slider);
+    slider.setPadding(slider.getPaddingLeft(), dp(12), slider.getPaddingRight(), 0);
+    box.addView(slider, new FrameLayout.LayoutParams(-1, dp(48)));
+    box.addView(caption, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
     LinearLayout.LayoutParams bounds = new LinearLayout.LayoutParams(0, -2, 1);
-    bounds.setMargins(dp(2), dp(8), dp(2), 0);
+    bounds.setMargins(dp(2), dp(4), dp(2), 0);
     row.addView(box, bounds);
   }
 
@@ -2422,6 +2443,14 @@ public final class MainActivity extends ComponentActivity {
                   MainActivity.this.frame(false);
                 }
 
+                public void saveFrame() {
+                  MainActivity.this.frame(true);
+                }
+
+                public void copyRecording() {
+                  MainActivity.this.copyRecording();
+                }
+
                 public void record() {
                   MainActivity.this.record();
                 }
@@ -3000,6 +3029,7 @@ public final class MainActivity extends ComponentActivity {
   @Override
   protected void onPause() {
     main.removeCallbacks(tick);
+    if (optionsPopup != null) optionsPopup.dismiss();
     if (videoGestures != null) videoGestures.cancel();
     bookmark(false);
     if (player != null) player.pause();

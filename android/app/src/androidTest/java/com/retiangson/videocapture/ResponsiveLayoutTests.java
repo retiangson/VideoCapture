@@ -297,6 +297,26 @@ public final class ResponsiveLayoutTests {
     return null;
   }
 
+  private static android.view.MenuItem option(
+      MainActivity activity, String category, String label) {
+    button((View) field(activity, "menu"), category).performClick();
+    android.widget.PopupMenu popup = (android.widget.PopupMenu) field(activity, "optionsPopup");
+    android.view.MenuItem found = null;
+    for (int i = 0; i < popup.getMenu().size(); i++) {
+      android.view.MenuItem item = popup.getMenu().getItem(i);
+      if (label.contentEquals(item.getTitle())) found = item;
+    }
+    popup.dismiss();
+    assertNotNull("Missing " + category + " option: " + label, found);
+    return found;
+  }
+
+  private static void chooseOption(MainActivity activity, String category, String label) {
+    android.view.MenuItem item = option(activity, category, label);
+    android.widget.PopupMenu popup = (android.widget.PopupMenu) field(activity, "optionsPopup");
+    assertTrue(popup.getMenu().performIdentifierAction(item.getItemId(), 0));
+  }
+
   @Test
   public void optionHighlightsFollowStateAndSavedPreferences() throws Exception {
     Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -312,12 +332,10 @@ public final class ResponsiveLayoutTests {
       scenario.onActivity(
           a -> {
             View menu = (View) field(a, "menu");
-            Button fill = (Button) field(a, "pictureModeButton"),
-                timeline = button(menu, "Timeline"),
-                reading = button(menu, "Read subtitles");
+            Button fill = (Button) field(a, "videoOptionsButton");
             assertTrue(fill.isSelected());
-            assertFalse(timeline.isSelected());
-            assertTrue(reading.isSelected());
+            assertFalse(option(a, "Video", "Timeline").isChecked());
+            assertTrue(option(a, "Audio", "Read subtitles").isChecked());
             try {
               java.lang.reflect.Method mode =
                   a.getClass().getDeclaredMethod("setPictureMode", PictureMode.class);
@@ -326,11 +344,11 @@ public final class ResponsiveLayoutTests {
             } catch (Exception error) {
               throw new AssertionError(error);
             }
-            timeline.performClick();
-            reading.performClick();
+            chooseOption(a, "Video", "Timeline");
+            chooseOption(a, "Audio", "Read subtitles");
             assertFalse(fill.isSelected());
-            assertTrue(timeline.isSelected());
-            assertFalse(reading.isSelected());
+            assertTrue(option(a, "Video", "Timeline").isChecked());
+            assertFalse(option(a, "Audio", "Read subtitles").isChecked());
             assertEquals("Regular", androidx.core.view.ViewCompat.getStateDescription(fill));
             fill.setEnabled(false);
             assertEquals(.35f, fill.getAlpha(), .01f);
@@ -342,13 +360,12 @@ public final class ResponsiveLayoutTests {
             BrowserOverlay overlay = (BrowserOverlay) field(a, "browser");
             overlay.setVisibility(View.GONE);
             assertFalse(browser.isSelected());
-            Button audio = button(menu, "Audio to text");
-            audio.performClick();
-            assertTrue(audio.isSelected());
+            chooseOption(a, "Audio", "Audio to text");
+            assertTrue(option(a, "Audio", "Audio to text").isChecked());
             BrowserOverlay panel = (BrowserOverlay) field(a, "browser");
             assertTrue(((Button) field(panel, "transcriptionButton")).isSelected());
-            audio.performClick();
-            assertFalse(audio.isSelected());
+            chooseOption(a, "Audio", "Audio to text");
+            assertFalse(option(a, "Audio", "Audio to text").isChecked());
             Button nav = (Button) field(panel, "navigationButton");
             nav.performClick();
             assertTrue(nav.isSelected());
@@ -365,9 +382,9 @@ public final class ResponsiveLayoutTests {
       scenario.onActivity(
           a -> {
             View menu = (View) field(a, "menu");
-            assertFalse(((Button) field(a, "pictureModeButton")).isSelected());
-            assertTrue(button(menu, "Timeline").isSelected());
-            assertFalse(button(menu, "Read subtitles").isSelected());
+            assertFalse(((Button) field(a, "videoOptionsButton")).isSelected());
+            assertTrue(option(a, "Video", "Timeline").isChecked());
+            assertFalse(option(a, "Audio", "Read subtitles").isChecked());
           });
     }
   }
@@ -393,7 +410,7 @@ public final class ResponsiveLayoutTests {
                   ((androidx.media3.ui.PlayerView) field(a, "playerView")).getResizeMode());
               assertEquals(
                   "Picture: " + mode.label,
-                  ((Button) field(a, "pictureModeButton")).getText().toString());
+                  option(a, "Video", "Picture: " + mode.label).getTitle().toString());
               ((Button) field(a, "fullscreenButton")).performClick();
               ((Button) field(a, "fullscreenButton")).performClick();
               assertEquals(mode, PictureMode.read(new PlayerStore(context)));

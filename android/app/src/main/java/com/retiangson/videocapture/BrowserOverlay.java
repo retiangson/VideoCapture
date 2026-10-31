@@ -2,7 +2,6 @@ package com.retiangson.videocapture;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Message;
 import android.view.*;
@@ -26,6 +25,10 @@ final class BrowserOverlay extends LinearLayout {
     void feedback(String value);
 
     void frame();
+
+    void saveFrame();
+
+    void copyRecording();
 
     void record();
 
@@ -96,17 +99,22 @@ final class BrowserOverlay extends LinearLayout {
     setElevation(Ui.dp(activity, 12));
     setAlpha(Math.max(.3f, store.level("browserOpacity", 1)));
     LinearLayout title = Ui.row(activity);
-    TextView grip = Ui.text(activity, "⋮⋮  Browser", 13, Color.WHITE);
+    TextView grip = Ui.text(activity, "BROWSER", 11, PlayerSkin.TEXT);
+    grip.setSingleLine(true);
+    grip.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    grip.setGravity(Gravity.CENTER_VERTICAL);
     title.addView(grip, new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
 
     opacity = Ui.slider(activity, getAlpha(), v -> opacity(v));
     opacity.setMin(300);
     opacity.setContentDescription("Browser panel opacity");
-    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 80), Ui.dp(activity, 48)));
-    title.addView(Ui.iconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
-    maximizeButton = Ui.iconButton(activity, "□", "Maximize or restore browser", this::maximize);
+    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 60), Ui.dp(activity, 48)));
+    title.addView(
+        Ui.compactIconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
+    maximizeButton =
+        Ui.compactIconButton(activity, "□", "Maximize or restore browser", this::maximize);
     title.addView(maximizeButton);
-    title.addView(Ui.iconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
+    title.addView(Ui.compactIconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
     addView(title);
     grip.setOnTouchListener(
         (v, e) -> {
@@ -138,8 +146,8 @@ final class BrowserOverlay extends LinearLayout {
         });
     LinearLayout tabRow = Ui.row(activity);
     tabRow.addView(
-        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 52), 1));
-    tabRow.addView(Ui.iconButton(activity, "+", "New browser tab", () -> add(HOME)));
+        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
+    tabRow.addView(Ui.compactIconButton(activity, "+", "New browser tab", () -> add(HOME)));
     addView(tabRow);
     page = new FrameLayout(activity);
     addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -200,9 +208,12 @@ final class BrowserOverlay extends LinearLayout {
     navigation.setVisibility(GONE);
     LinearLayout actions = Ui.row(activity);
     actions.addView(navigationButton);
-    actions.addView(MenuIcons.action(activity, "Frame", MenuIcons.Kind.FRAME, host::frame));
+    actions.addView(MenuIcons.action(activity, "Copy frame", MenuIcons.Kind.FRAME, host::frame));
+    actions.addView(MenuIcons.action(activity, "Save frame", MenuIcons.Kind.SAVE, host::saveFrame));
     recordingButton = MenuIcons.action(activity, "Record", MenuIcons.Kind.RECORD, host::record);
     actions.addView(recordingButton);
+    actions.addView(
+        MenuIcons.action(activity, "Copy recording", MenuIcons.Kind.COPY, host::copyRecording));
     actions.addView(MenuIcons.action(activity, "Text", MenuIcons.Kind.TEXT, host::ocr));
     transcriptionButton =
         MenuIcons.action(activity, "Audio to text", MenuIcons.Kind.MIC, host::audio);
@@ -415,24 +426,36 @@ final class BrowserOverlay extends LinearLayout {
     tabs.removeAllViews();
     for (int i = 0; i < views.size(); i++) {
       final int index = i;
-      LinearLayout tab = Ui.row(activity);
+      FrameLayout tab = new FrameLayout(activity);
+      LinearLayout.LayoutParams tabBounds =
+          new LinearLayout.LayoutParams(Ui.dp(activity, 152), Ui.dp(activity, 48));
+      tabBounds.setMargins(Ui.dp(activity, 2), 0, Ui.dp(activity, 2), 0);
+      tab.setLayoutParams(tabBounds);
       Button title = Ui.button(activity, titles.get(i), () -> select(index));
       Ui.active(title, i == selected);
       title.setTextSize(10);
       title.setSingleLine(true);
       title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-      title.setMaxWidth(Ui.dp(activity, 150));
-      title.setMinHeight(Ui.dp(activity, 48));
-      tab.addView(title);
-      Button close = Ui.iconButton(activity, "×", "Close browser tab", () -> closeTab(index));
-      close.setPadding(0, 0, 0, 0);
-      tab.addView(close, new LinearLayout.LayoutParams(Ui.dp(activity, 48), Ui.dp(activity, 48)));
+      title.setMinWidth(0);
+      title.setMinimumWidth(0);
+      Ui.compactSurface(title);
+      title.setPadding(Ui.dp(activity, 10), 0, Ui.dp(activity, 46), 0);
+      title.setContentDescription("Browser tab: " + titles.get(i));
+      tab.addView(title, new FrameLayout.LayoutParams(-1, -1));
+      Button close =
+          Ui.iconButton(
+              activity, "×", "Close browser tab: " + titles.get(i), () -> closeTab(index));
+      close.setBackground(
+          new android.graphics.drawable.RippleDrawable(
+              android.content.res.ColorStateList.valueOf(0x28ffffff), null, null));
+      tab.addView(close, new FrameLayout.LayoutParams(Ui.dp(activity, 48), -1, Gravity.END));
       tabs.addView(tab);
     }
   }
 
   private void closeTab(int index) {
     if (index < 0 || index >= views.size()) return;
+    WebView active = current();
     WebView view = views.remove(index);
     microphone.remove(view);
     attachments.cancelFor(view);
@@ -441,7 +464,7 @@ final class BrowserOverlay extends LinearLayout {
     page.removeView(view);
     view.destroy();
     if (views.isEmpty()) add(HOME);
-    else select(Math.min(selected, views.size() - 1));
+    else select(active == view ? Math.min(index, views.size() - 1) : views.indexOf(active));
   }
 
   private void save() {

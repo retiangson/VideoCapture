@@ -1,5 +1,15 @@
 # Android preview validation
 
+## Version 0.4.1 — 31 October 2026
+
+The player now groups configuration into Source, Audio, Video and More popups, with Playlist and Browser alongside them. Capture actions have moved from the player menu to the browser toolbar; Save frame and Copy recording were added there. Browser window buttons and player header icons use 36 dp visible surfaces within 48 dp touch targets. Level cards are 48 dp tall. The title/control row and the tab/add row are separate; close is inside each tab chip. Removing an inactive tab preserves the current page and persists the remaining tab list.
+
+- Build (`assembleDebug`, `assembleDebugAndroidTest`, `assemblePreview`) and lint passed: zero errors, 25 warnings. The locally debug-signed minified APK is version 0.4.1/code 10. Signature and 16 KB ZIP alignment passed; these are packaging checks, not physical 16 KB runtime validation.
+- The complete offline tablet suite passed **37 tests in 152.347 seconds**, including real media/OCR/speech, source-only capture/export, Gallery paste/upload, browser audio policy, privacy clearing, playlist changes and all compact-control/layout regressions. Airplane mode and Wi-Fi-off checks remain enabled.
+- All **13** compact-control and responsive tests passed at **320 dp phone width** (1080×2400, density 540), **38.194 seconds**. The first run had two failures while the emulator displayed a System UI ANR; after dismissing that OS dialog, the complete run passed, including actual keyboard insets and USB feedback. The new category/tab checks passed in both runs.
+- The same **13 tests passed in short phone landscape** (2400×1080, density 420), **40.129 seconds**. Coverage includes category contents, removed main-menu duplicates, toggle actions/restoration, usable header/slider bounds, tab close/selection/persistence, gestures, keyboard resizing, maximize/restore and rotation.
+- The optimized APK's narrow-phone player/browser and tablet Audio popup were separately installed, launched and visually reviewed. A real tap on Source → USB capture reached the expected no-device feedback in the emulator. Offline WebView error content is expected with networking disabled; no live account login was exercised. Physical Samsung device behavior remains unverified. Windows is unchanged.
+
 ## Version 0.4.0 — 30 October 2026
 
 Final `assembleDebug`, `assembleDebugAndroidTest`, `assemblePreview`, `lintDebug` and `bundleRelease` succeeded. Lint reports **zero errors and 25 warnings**, including guarded WebKit feature calls that lint does not infer, dependency update notices, intentional JavaScript, English-only UI and custom-view accessibility/tooling warnings. This is not a warning-free production certification. Preview package/version: `com.retiangson.videocapture.preview`, code 9, version 0.4.0. Local debug-key APK signature and 16 KB ZIP alignment passed. The release AAB is unsigned; production signing and Play delivery sizing remain pending.
