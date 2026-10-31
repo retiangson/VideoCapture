@@ -12,6 +12,7 @@ final class MenuIcons extends Drawable {
   enum Kind {
     OPEN("M3,7H10L12,4H21V19H3Z M3,10H21"),
     PLAYLIST("M4,6H16 M4,11H16 M4,16H11 M18,13V21 M14,17H22"),
+    DELETE("M5,7H19 M9,4H15 M7,7V21H17V7 M10,10V18 M14,10V18"),
     RECORD("M12,4A8,8,0,1,1,12,20A8,8,0,1,1,12,4"),
     USB("M12,21V3 M9,6L12,3L15,6 M12,15L6,11V8 M12,12L18,8V5 M4,6H8V8H4Z M16,3H20V5H16Z"),
     FRAME("M3,7H8L10,4H15L17,7H21V20H3Z M16,13A4,4,0,1,1,8,13A4,4,0,1,1,16,13Z"),
@@ -71,6 +72,12 @@ final class MenuIcons extends Drawable {
 
   static Button icon(Context context, Kind kind, String label, Runnable action) {
     Button button = Ui.iconButton(context, "", label, action);
+    setIcon(button, kind);
+    return button;
+  }
+
+  static Button compact(Context context, Kind kind, String label, Runnable action) {
+    Button button = Ui.compactIconButton(context, "", label, action);
     setIcon(button, kind);
     return button;
   }

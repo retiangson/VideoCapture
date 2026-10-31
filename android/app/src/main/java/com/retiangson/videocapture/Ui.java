@@ -97,6 +97,20 @@ final class Ui {
     return button;
   }
 
+  /** A smaller visible surface inside the existing 48 dp touch/focus target. */
+  static Button compactIconButton(Context c, String glyph, String description, Runnable action) {
+    Button button = iconButton(c, glyph, description, action);
+    compactSurface(button);
+    return button;
+  }
+
+  static void compactSurface(Button button) {
+    int inset = dp(button.getContext(), 6);
+    button.setBackground(
+        new android.graphics.drawable.InsetDrawable(button.getBackground(), inset));
+    button.setPadding(0, 0, 0, 0);
+  }
+
   static LinearLayout row(Context c) {
     LinearLayout l = new LinearLayout(c);
     l.setOrientation(LinearLayout.HORIZONTAL);

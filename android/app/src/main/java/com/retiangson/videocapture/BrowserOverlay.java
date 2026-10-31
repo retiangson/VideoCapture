@@ -2,7 +2,6 @@ package com.retiangson.videocapture;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Message;
 import android.view.*;
@@ -19,11 +18,17 @@ final class BrowserOverlay extends LinearLayout {
       return false;
     }
 
+    default void microphoneReleased() {}
+
     void permission(Consumer<Boolean> result);
 
     void feedback(String value);
 
     void frame();
+
+    void saveFrame();
+
+    void copyRecording();
 
     void record();
 
@@ -37,6 +42,7 @@ final class BrowserOverlay extends LinearLayout {
   private final PlayerStore store;
   private final Host host;
   private final BrowserAttachments attachments;
+  private final BrowserMicrophone microphone;
   private final LinearLayout tabs = Ui.row(getContext()), navigation = Ui.row(getContext());
   private final FrameLayout page;
   private final LinearLayout tools;
@@ -64,23 +70,51 @@ final class BrowserOverlay extends LinearLayout {
     this.store = store;
     this.host = host;
     attachments = new BrowserAttachments(activity, host::chooseFiles, host::feedback);
+    microphone =
+        new BrowserMicrophone(
+            activity,
+            new BrowserMicrophone.Host() {
+              public void prepare(Consumer<Boolean> ready) {
+                host.permission(ready);
+              }
+
+              public void released() {
+                host.microphoneReleased();
+              }
+
+              public void feedback(String message) {
+                host.feedback(message);
+              }
+
+              public boolean active(WebView view) {
+                return !disposed
+                    && getVisibility() == VISIBLE
+                    && view == current()
+                    && !activity.isFinishing();
+              }
+            });
     setOrientation(VERTICAL);
     setPadding(Ui.dp(activity, 8), Ui.dp(activity, 6), Ui.dp(activity, 8), Ui.dp(activity, 6));
     setBackground(PlayerSkin.surface(Ui.dp(activity, 12), false));
     setElevation(Ui.dp(activity, 12));
     setAlpha(Math.max(.3f, store.level("browserOpacity", 1)));
     LinearLayout title = Ui.row(activity);
-    TextView grip = Ui.text(activity, "⋮⋮  Browser", 13, Color.WHITE);
+    TextView grip = Ui.text(activity, "BROWSER", 11, PlayerSkin.TEXT);
+    grip.setSingleLine(true);
+    grip.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    grip.setGravity(Gravity.CENTER_VERTICAL);
     title.addView(grip, new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
 
     opacity = Ui.slider(activity, getAlpha(), v -> opacity(v));
     opacity.setMin(300);
     opacity.setContentDescription("Browser panel opacity");
-    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 80), Ui.dp(activity, 48)));
-    title.addView(Ui.iconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
-    maximizeButton = Ui.iconButton(activity, "□", "Maximize or restore browser", this::maximize);
+    title.addView(opacity, new LinearLayout.LayoutParams(Ui.dp(activity, 60), Ui.dp(activity, 48)));
+    title.addView(
+        Ui.compactIconButton(activity, "—", "Minimize browser", () -> setVisibility(GONE)));
+    maximizeButton =
+        Ui.compactIconButton(activity, "□", "Maximize or restore browser", this::maximize);
     title.addView(maximizeButton);
-    title.addView(Ui.iconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
+    title.addView(Ui.compactIconButton(activity, "×", "Hide browser", () -> setVisibility(GONE)));
     addView(title);
     grip.setOnTouchListener(
         (v, e) -> {
@@ -112,8 +146,8 @@ final class BrowserOverlay extends LinearLayout {
         });
     LinearLayout tabRow = Ui.row(activity);
     tabRow.addView(
-        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 52), 1));
-    tabRow.addView(Ui.iconButton(activity, "+", "New browser tab", () -> add(HOME)));
+        Ui.scrollRow(activity, tabs), new LinearLayout.LayoutParams(0, Ui.dp(activity, 48), 1));
+    tabRow.addView(Ui.compactIconButton(activity, "+", "New browser tab", () -> add(HOME)));
     addView(tabRow);
     page = new FrameLayout(activity);
     addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -174,9 +208,12 @@ final class BrowserOverlay extends LinearLayout {
     navigation.setVisibility(GONE);
     LinearLayout actions = Ui.row(activity);
     actions.addView(navigationButton);
-    actions.addView(MenuIcons.action(activity, "Frame", MenuIcons.Kind.FRAME, host::frame));
+    actions.addView(MenuIcons.action(activity, "Copy frame", MenuIcons.Kind.FRAME, host::frame));
+    actions.addView(MenuIcons.action(activity, "Save frame", MenuIcons.Kind.SAVE, host::saveFrame));
     recordingButton = MenuIcons.action(activity, "Record", MenuIcons.Kind.RECORD, host::record);
     actions.addView(recordingButton);
+    actions.addView(
+        MenuIcons.action(activity, "Copy recording", MenuIcons.Kind.COPY, host::copyRecording));
     actions.addView(MenuIcons.action(activity, "Text", MenuIcons.Kind.TEXT, host::ocr));
     transcriptionButton =
         MenuIcons.action(activity, "Audio to text", MenuIcons.Kind.MIC, host::audio);
@@ -219,6 +256,10 @@ final class BrowserOverlay extends LinearLayout {
   }
 
   void add(String url) {
+    if (BrowserNavigation.externalSignIn(url)) {
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+      url = HOME;
+    }
     if (disposed || views.size() >= 32) {
       host.feedback("Browser tab limit reached (32).");
       return;
@@ -236,16 +277,29 @@ final class BrowserOverlay extends LinearLayout {
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     settings.setSafeBrowsingEnabled(true);
     settings.setMediaPlaybackRequiresUserGesture(true);
+    microphone.install(view);
     CookieManager.getInstance().setAcceptCookie(true);
     view.setWebViewClient(
         new WebViewClient() {
           @Override
           public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
+            if (BrowserNavigation.externalSignIn(url)) {
+              v.stopLoading();
+              BrowserNavigation.openSignIn(activity, url, host::feedback);
+              v.loadUrl(HOME);
+              return;
+            }
             attachments.cancelFor(v);
+            microphone.navigation(v);
           }
 
           @Override
           public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
+            if (BrowserNavigation.externalSignIn(request.getUrl().toString())) {
+              if (request.isForMainFrame())
+                BrowserNavigation.openSignIn(activity, request.getUrl().toString(), host::feedback);
+              return true;
+            }
             if (!valid(request.getUrl().toString())) {
               host.feedback("Only HTTPS browser navigation is supported.");
               return true;
@@ -304,7 +358,8 @@ final class BrowserOverlay extends LinearLayout {
                   }
                   String origin = view.getUrl();
                   requests.add(request);
-                  host.permission(
+                  microphone.permission(
+                      view,
                       ok -> {
                         if (!requests.remove(request)) return;
                         if (ok && !disposed && Objects.equals(view.getUrl(), origin))
@@ -339,12 +394,16 @@ final class BrowserOverlay extends LinearLayout {
             host.feedback("Downloads are not supported in the floating browser."));
     page.addView(view, new FrameLayout.LayoutParams(-1, -1));
     select(views.size() - 1);
-    if (!"about:blank".equals(url)) view.loadUrl(url);
+    if (BrowserNavigation.externalSignIn(url))
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+    else if (!"about:blank".equals(url)) view.loadUrl(url);
   }
 
   private void navigate(String url) {
     if (!url.contains("://")) url = "https://" + url;
-    if (valid(url) && current() != null) current().loadUrl(url);
+    if (BrowserNavigation.externalSignIn(url))
+      BrowserNavigation.openSignIn(activity, url, host::feedback);
+    else if (valid(url) && current() != null) current().loadUrl(url);
     else host.feedback("Enter a valid HTTPS address.");
   }
 
@@ -353,6 +412,8 @@ final class BrowserOverlay extends LinearLayout {
   }
 
   private void select(int index) {
+    WebView previous = current();
+    if (previous != null && views.indexOf(previous) != index) microphone.stop(previous);
     attachments.cancel();
     selected = index;
     for (int i = 0; i < views.size(); i++) views.get(i).setVisibility(i == index ? VISIBLE : GONE);
@@ -365,32 +426,45 @@ final class BrowserOverlay extends LinearLayout {
     tabs.removeAllViews();
     for (int i = 0; i < views.size(); i++) {
       final int index = i;
-      LinearLayout tab = Ui.row(activity);
+      FrameLayout tab = new FrameLayout(activity);
+      LinearLayout.LayoutParams tabBounds =
+          new LinearLayout.LayoutParams(Ui.dp(activity, 152), Ui.dp(activity, 48));
+      tabBounds.setMargins(Ui.dp(activity, 2), 0, Ui.dp(activity, 2), 0);
+      tab.setLayoutParams(tabBounds);
       Button title = Ui.button(activity, titles.get(i), () -> select(index));
       Ui.active(title, i == selected);
       title.setTextSize(10);
       title.setSingleLine(true);
       title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-      title.setMaxWidth(Ui.dp(activity, 150));
-      title.setMinHeight(Ui.dp(activity, 48));
-      tab.addView(title);
-      Button close = Ui.iconButton(activity, "×", "Close browser tab", () -> closeTab(index));
-      close.setPadding(0, 0, 0, 0);
-      tab.addView(close, new LinearLayout.LayoutParams(Ui.dp(activity, 48), Ui.dp(activity, 48)));
+      title.setMinWidth(0);
+      title.setMinimumWidth(0);
+      Ui.compactSurface(title);
+      title.setPadding(Ui.dp(activity, 10), 0, Ui.dp(activity, 46), 0);
+      title.setContentDescription("Browser tab: " + titles.get(i));
+      tab.addView(title, new FrameLayout.LayoutParams(-1, -1));
+      Button close =
+          Ui.iconButton(
+              activity, "×", "Close browser tab: " + titles.get(i), () -> closeTab(index));
+      close.setBackground(
+          new android.graphics.drawable.RippleDrawable(
+              android.content.res.ColorStateList.valueOf(0x28ffffff), null, null));
+      tab.addView(close, new FrameLayout.LayoutParams(Ui.dp(activity, 48), -1, Gravity.END));
       tabs.addView(tab);
     }
   }
 
   private void closeTab(int index) {
     if (index < 0 || index >= views.size()) return;
+    WebView active = current();
     WebView view = views.remove(index);
+    microphone.remove(view);
     attachments.cancelFor(view);
     destinations.remove(view);
     titles.remove(index);
     page.removeView(view);
     view.destroy();
     if (views.isEmpty()) add(HOME);
-    else select(Math.min(selected, views.size() - 1));
+    else select(active == view ? Math.min(index, views.size() - 1) : views.indexOf(active));
   }
 
   private void save() {
@@ -442,6 +516,7 @@ final class BrowserOverlay extends LinearLayout {
   @Override
   protected void onVisibilityChanged(View changedView, int visibility) {
     super.onVisibilityChanged(changedView, visibility);
+    if (microphone != null && getVisibility() != VISIBLE) microphone.stopAll();
     if (host != null) host.stateChanged();
   }
 
@@ -550,9 +625,20 @@ final class BrowserOverlay extends LinearLayout {
     layoutWithinParent();
   }
 
-  void pause() {
+  void pause(boolean awaitingMicrophonePermission) {
+    // Android's first-use permission dialog pauses the host before returning its decision.
+    // No stream can exist yet; keep the pending handshake alive until the activity resumes.
+    if (!awaitingMicrophonePermission) stopMicrophone();
     CookieManager.getInstance().flush();
     for (WebView view : views) view.onPause();
+  }
+
+  void stopMicrophone() {
+    microphone.stopAll();
+  }
+
+  void clearCache() {
+    for (WebView view : views) view.clearCache(true);
   }
 
   void resume() {
@@ -561,6 +647,7 @@ final class BrowserOverlay extends LinearLayout {
 
   void destroy() {
     save();
+    microphone.stopAll();
     disposed = true;
     attachments.cancel();
     for (PermissionRequest request : requests)

@@ -51,7 +51,8 @@ public final class MainActivity extends ComponentActivity {
   private PlayerView playerView;
   private TextureView usbView;
   private View gesturesView;
-  private LinearLayout menu, audioPanel;
+  private LinearLayout menu, audioPanel, progressRow;
+  private PopupMenu optionsPopup;
   private SourceChooser sourceChooser;
   private TextView status, position, transcriptStatus, mediaTitle, gestureFeedback;
   private EditText transcript;
@@ -63,11 +64,22 @@ public final class MainActivity extends ComponentActivity {
       fullscreenButton,
       rotationLockButton,
       hideMenuButton,
-      pictureModeButton;
+      videoOptionsButton,
+      audioOptionsButton;
   private Spinner audioSource;
   private ExoPlayer player;
   private PlayerStore store;
   private BrowserOverlay browser;
+  private boolean clearingBrowserData;
+  private PlaylistOverlay playlistPanel;
+  private Button playlistButton;
+  private List<PlaylistOverlay.Entry> playlistRows = List.of();
+  private String playlistCurrent = "";
+  private final ExecutorService playlistIo = Executors.newSingleThreadExecutor();
+  private CancellationSignal playlistScan, playlistNamesScan;
+  private boolean importingPlaylist, pickerPlay = true;
+  private String pickerResumeUri;
+  private ActivityResultLauncher<Uri> folders;
   private VideoGestures videoGestures;
   private UsbCapture usb;
   private Surface usbSurface;
@@ -101,12 +113,15 @@ public final class MainActivity extends ComponentActivity {
   private AudioDeviceInfo usbAudioDevice;
   private volatile AudioInput.Samples samples;
   private volatile boolean audioCapturing;
-  private boolean transcribing;
+  private boolean transcribing, browserUsingMicrophone, browserAudioReady;
+  private final List<Consumer<Boolean>> browserMicrophoneWaiters = new ArrayList<>();
+  private final Runnable restoreBrowserAudio = this::restoreBrowserAudioNow;
   private volatile boolean capturingMic;
   private long audioStarted, audioFileStart;
   private AtomicBoolean decoderCancelled = new AtomicBoolean();
   private OfflineSpeech speech;
   private TextRecognizer ocr;
+  private OcrConsent ocrConsent;
   private TextToSpeech speaker;
   private boolean ttsReady;
   private String lastRead = "", embeddedCue = "";
@@ -117,6 +132,8 @@ public final class MainActivity extends ComponentActivity {
       };
   private long lastOcr;
   private Consumer<Boolean> pendingPermission;
+  private boolean requestingMicrophonePermission;
+  private Runnable permissionResultOnResume;
   private ActivityResultLauncher<String[]> files;
   private ActivityResultLauncher<Intent> browserFiles;
   private Consumer<Uri[]> browserFilesResult;
@@ -150,29 +167,47 @@ public final class MainActivity extends ComponentActivity {
     selectedUsb = store.text("usb", "");
     queue.addAll(store.list("playlist", 200));
     speech = new OfflineSpeech(this, main);
+    ocrConsent = new OcrConsent(this, store);
+    pickerPlay = state == null || state.getBoolean("pickerPlay", true);
+    pickerResumeUri = state == null ? null : state.getString("pickerResumeUri");
     files =
         registerForActivityResult(
             new ActivityResultContracts.OpenMultipleDocuments(),
             uris -> {
-              if (uris.isEmpty()) return;
-              for (Uri uri : uris) {
-                try {
-                  getContentResolver()
-                      .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (SecurityException ignored) {
-                }
-                if (queue.size() < 200 && !queue.contains(uri.toString()))
-                  queue.add(uri.toString());
+              if (uris.isEmpty()) {
+                resumeAfterPicker();
+                return;
               }
-              store.list("playlist", queue);
-              playIndex(queue.indexOf(uris.get(0).toString()));
+              for (Uri uri : uris) retainReadPermission(uri);
+              importFiles(uris, pickerPlay);
+            });
+    folders =
+        registerForActivityResult(
+            new ActivityResultContracts.OpenDocumentTree(),
+            uri -> {
+              if (uri == null) {
+                resumeAfterPicker();
+                return;
+              }
+              retainReadPermission(uri);
+              importFolder(uri, pickerPlay);
             });
     buildUi();
+    if (state != null && state.getBoolean("playlistVisible", false)) playlist();
     getOnBackPressedDispatcher()
         .addCallback(
             this,
             new androidx.activity.OnBackPressedCallback(true) {
               public void handleOnBackPressed() {
+                if (playlistPanel != null
+                    && playlistPanel.getVisibility() == View.VISIBLE
+                    && (browser == null
+                        || browser.getVisibility() != View.VISIBLE
+                        || root.indexOfChild(playlistPanel) > root.indexOfChild(browser))) {
+                  playlistPanel.setVisibility(View.GONE);
+                  updateToggleStates();
+                  return;
+                }
                 if (browser != null && browser.getVisibility() == View.VISIBLE) {
                   if (audioPanel != null && audioPanel.getVisibility() == View.VISIBLE)
                     audioPanel.setVisibility(View.GONE);
@@ -235,6 +270,7 @@ public final class MainActivity extends ComponentActivity {
     root.addOnLayoutChangeListener(
         (v, l, t, r, b, ol, ot, or, ob) -> {
           if (browser != null) browser.layoutWithinParent();
+          if (playlistPanel != null) playlistPanel.layoutWithinParent();
           fitCapture();
           layoutSourceChooser();
           if (menu != null)
@@ -261,6 +297,7 @@ public final class MainActivity extends ComponentActivity {
           root.post(
               () -> {
                 if (browser != null) browser.layoutWithinParent();
+                if (playlistPanel != null) playlistPanel.layoutWithinParent();
               });
           return insets;
         });
@@ -382,14 +419,14 @@ public final class MainActivity extends ComponentActivity {
     grip.setEllipsize(android.text.TextUtils.TruncateAt.END);
     top.addView(grip, new LinearLayout.LayoutParams(0, dp(48), 1));
     fullscreenButton =
-        MenuIcons.icon(
+        MenuIcons.compact(
             this, MenuIcons.Kind.FULLSCREEN, "Fullscreen", () -> setFullscreen(!fullscreen));
     top.addView(fullscreenButton);
     rotationLockButton =
-        MenuIcons.icon(this, MenuIcons.Kind.UNLOCK, "Lock rotation", this::toggleRotationLock);
+        MenuIcons.compact(this, MenuIcons.Kind.UNLOCK, "Lock rotation", this::toggleRotationLock);
     top.addView(rotationLockButton);
     hideMenuButton =
-        MenuIcons.icon(
+        MenuIcons.compact(
             this,
             MenuIcons.Kind.HIDE,
             "Hide menu",
@@ -423,6 +460,7 @@ public final class MainActivity extends ComponentActivity {
           }
         });
     LinearLayout progress = Ui.row(this);
+    progressRow = progress;
     mediaTitle = Ui.text(this, "READY TO PLAY", 13, PlayerSkin.TEXT);
     mediaTitle.setSingleLine(true);
     mediaTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -450,10 +488,6 @@ public final class MainActivity extends ComponentActivity {
 
           public void onProgressChanged(SeekBar bar, int value, boolean user) {}
         });
-    LinearLayout actions = Ui.row(this);
-    actions.addView(MenuIcons.action(this, "Open", MenuIcons.Kind.OPEN, this::pickFiles));
-    actions.addView(MenuIcons.action(this, "Playlist", MenuIcons.Kind.PLAYLIST, this::playlist));
-    actions.addView(MenuIcons.action(this, "USB", MenuIcons.Kind.USB, this::chooseUsb));
     LinearLayout transport = Ui.row(this);
     transport.setGravity(Gravity.CENTER);
     transport.setPadding(dp(6), dp(6), dp(6), dp(6));
@@ -478,59 +512,21 @@ public final class MainActivity extends ComponentActivity {
             this, PlayerSkin.Icon.Kind.RECORD, "Record video", this::record, false);
     transport.addView(recordButton);
     menuBody.addView(transport);
-    actions.addView(MenuIcons.action(this, "Copy frame", MenuIcons.Kind.FRAME, () -> frame(false)));
-    actions.addView(MenuIcons.action(this, "Save frame", MenuIcons.Kind.SAVE, () -> frame(true)));
-    actions.addView(
-        MenuIcons.action(this, "Copy recording", MenuIcons.Kind.COPY, this::copyRecording));
-    menuBody.addView(Ui.scrollRow(this, actions));
-    LinearLayout more = Ui.row(this);
-    more.addView(MenuIcons.action(this, "Mode / FPS", MenuIcons.Kind.SETTINGS, this::chooseMode));
-    more.addView(MenuIcons.action(this, "Audio input", MenuIcons.Kind.MIC, this::chooseAudio));
-    more.addView(
-        MenuIcons.action(this, "Audio track", MenuIcons.Kind.MUSIC, this::chooseFileAudio));
-    pictureModeButton =
-        MenuIcons.action(
-            this,
-            "Picture: " + PictureMode.read(store).label,
-            MenuIcons.Kind.PICTURE,
-            this::choosePictureMode);
-    more.addView(pictureModeButton);
-    addToggle(
-        more,
-        "Browser",
-        MenuIcons.Kind.BROWSER,
-        () -> browser != null && browser.getVisibility() == View.VISIBLE,
-        this::toggleBrowserPanel);
-    more.addView(
-        MenuIcons.action(this, "Aa Copy text", MenuIcons.Kind.TEXT, () -> recognize(false)));
-    more.addView(
-        MenuIcons.action(this, "Subtitle track", MenuIcons.Kind.SUBTITLE, this::chooseSubtitles));
-    addToggle(more, "Read subtitles", MenuIcons.Kind.READ, () -> reading, this::toggleReading);
-    more.addView(MenuIcons.action(this, "Voice", MenuIcons.Kind.AUDIO, this::chooseVoice));
-    more.addView(MenuIcons.action(this, "Licenses", MenuIcons.Kind.INFO, this::licenses));
-    addToggle(
-        more,
-        "Audio to text",
-        MenuIcons.Kind.MIC,
-        () ->
-            browser != null
-                && browser.getVisibility() == View.VISIBLE
-                && audioPanel != null
-                && audioPanel.getVisibility() == View.VISIBLE,
-        this::toggleAudioPanel);
-    addToggle(
-        more,
-        "Timeline",
-        MenuIcons.Kind.TIMELINE,
-        () -> progress.getVisibility() == View.VISIBLE,
-        () -> {
-          progress.setVisibility(
-              progress.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-          store.put("timeline", progress.getVisibility() == View.VISIBLE ? "true" : "false");
-        });
-    more.addView(
-        MenuIcons.action(this, "Brightness", MenuIcons.Kind.BRIGHTNESS, this::chooseBrightness));
-    menuBody.addView(Ui.scrollRow(this, more));
+    LinearLayout sources = Ui.row(this);
+    menuAction(sources, "Source", MenuIcons.Kind.OPEN, this::showSourceOptions);
+    playlistButton = menuAction(sources, "Playlist", MenuIcons.Kind.PLAYLIST, v -> playlist());
+    Button browserButton =
+        menuAction(sources, "Browser", MenuIcons.Kind.BROWSER, v -> toggleBrowserPanel());
+    toggleStates.put(
+        browserButton, () -> browser != null && browser.getVisibility() == View.VISIBLE);
+    menuBody.addView(sources);
+    LinearLayout configuration = Ui.row(this);
+    audioOptionsButton =
+        menuAction(configuration, "Audio", MenuIcons.Kind.AUDIO, this::showAudioOptions);
+    videoOptionsButton =
+        menuAction(configuration, "Video", MenuIcons.Kind.PICTURE, this::showVideoOptions);
+    menuAction(configuration, "More", MenuIcons.Kind.SETTINGS, this::showMoreOptions);
+    menuBody.addView(configuration);
     progress.setVisibility(
         Boolean.parseBoolean(store.text("timeline", "true")) ? View.VISIBLE : View.GONE);
     LinearLayout levels = Ui.row(this);
@@ -565,23 +561,89 @@ public final class MainActivity extends ComponentActivity {
     setFullscreen(false);
   }
 
-  private void addToggle(
-      LinearLayout row,
-      String label,
-      MenuIcons.Kind icon,
-      java.util.function.BooleanSupplier state,
-      Runnable action) {
-    Button button =
-        MenuIcons.action(
-            this,
-            label,
-            icon,
-            () -> {
-              action.run();
-              updateToggleStates();
-            });
-    toggleStates.put(button, state);
-    row.addView(button);
+  private Button menuAction(
+      LinearLayout row, String label, MenuIcons.Kind icon, Consumer<View> action) {
+    Button button = MenuIcons.action(this, label, icon, () -> {});
+    button.setMinWidth(0);
+    button.setMinimumWidth(0);
+    button.setPadding(dp(6), dp(2), dp(6), dp(2));
+    button.setSingleLine(true);
+    button.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    button.setOnClickListener(
+        view -> {
+          action.accept(view);
+          updateToggleStates();
+        });
+    LinearLayout.LayoutParams bounds = new LinearLayout.LayoutParams(0, dp(48), 1);
+    bounds.setMargins(dp(2), dp(2), dp(2), dp(2));
+    row.addView(button, bounds);
+    return button;
+  }
+
+  private void showOptions(View anchor, List<PlayerOptions.Option> options) {
+    if (optionsPopup != null) optionsPopup.dismiss();
+    optionsPopup = PlayerOptions.show(this, anchor, options, this::updateToggleStates);
+  }
+
+  private void showSourceOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Open files", MenuIcons.Kind.OPEN, this::pickFiles),
+            new PlayerOptions.Option("Open folder", MenuIcons.Kind.OPEN, () -> pickFolder(true)),
+            new PlayerOptions.Option("USB capture", MenuIcons.Kind.USB, this::chooseUsb)));
+  }
+
+  private void showAudioOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Audio input", MenuIcons.Kind.MIC, this::chooseAudio),
+            new PlayerOptions.Option("Audio track", MenuIcons.Kind.MUSIC, this::chooseFileAudio),
+            new PlayerOptions.Option(
+                "Subtitle track", MenuIcons.Kind.SUBTITLE, this::chooseSubtitles),
+            new PlayerOptions.Option(
+                "Read subtitles", MenuIcons.Kind.READ, this::toggleReading, reading),
+            new PlayerOptions.Option("Reading voice", MenuIcons.Kind.AUDIO, this::chooseVoice),
+            new PlayerOptions.Option(
+                "Audio to text",
+                MenuIcons.Kind.MIC,
+                this::toggleAudioPanel,
+                browser != null
+                    && browser.getVisibility() == View.VISIBLE
+                    && audioPanel != null
+                    && audioPanel.getVisibility() == View.VISIBLE)));
+  }
+
+  private void showVideoOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option(
+                "Picture: " + PictureMode.read(store).label,
+                MenuIcons.Kind.PICTURE,
+                this::choosePictureMode),
+            new PlayerOptions.Option("Mode / FPS", MenuIcons.Kind.SETTINGS, this::chooseMode),
+            new PlayerOptions.Option(
+                "Timeline",
+                MenuIcons.Kind.TIMELINE,
+                () -> {
+                  progressRow.setVisibility(
+                      progressRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                  store.put(
+                      "timeline", Boolean.toString(progressRow.getVisibility() == View.VISIBLE));
+                },
+                progressRow.getVisibility() == View.VISIBLE),
+            new PlayerOptions.Option(
+                "Brightness", MenuIcons.Kind.BRIGHTNESS, this::chooseBrightness)));
+  }
+
+  private void showMoreOptions(View anchor) {
+    showOptions(
+        anchor,
+        List.of(
+            new PlayerOptions.Option("Licenses", MenuIcons.Kind.INFO, this::licenses),
+            new PlayerOptions.Option("Privacy", MenuIcons.Kind.INFO, this::showPrivacy)));
   }
 
   private void toggleRotationLock() {
@@ -597,8 +659,11 @@ public final class MainActivity extends ComponentActivity {
   private void setVideoVolume(float value) {
     videoVolume = Math.max(0, Math.min(1, value));
     store.putLevel("videoVolume", videoVolume);
-    if (player != null) player.setVolume(audioCapturing && capturingMic ? 0 : videoVolume);
-    if (usbAudio != null) usbAudio.monitor(!(audioCapturing && capturingMic), videoVolume);
+    if (player != null)
+      player.setVolume(
+          (audioCapturing && capturingMic || browserUsingMicrophone) ? 0 : videoVolume);
+    if (usbAudio != null)
+      usbAudio.monitor(!(audioCapturing && capturingMic || browserUsingMicrophone), videoVolume);
     updateLevel("Video", videoVolume);
   }
 
@@ -647,17 +712,24 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void updateToggleStates() {
+    if (closed) return;
+    Ui.active(
+        playlistButton, playlistPanel != null && playlistPanel.getVisibility() == View.VISIBLE);
+    if (playlistPanel != null) {
+      String current = live ? "usb" : fileUri == null ? "" : fileUri.toString();
+      if (!current.equals(playlistCurrent)) refreshPlaylist();
+      else
+        playlistPanel.update(
+            playlistRows, !sourceLocked() && !importingPlaylist, importingPlaylist);
+    }
     updateLevel("Video", videoVolume);
     updateLevel("Reading", readingVolume);
     updateLevel("Opacity", menu.getAlpha());
     for (Map.Entry<Button, java.util.function.BooleanSupplier> entry : toggleStates.entrySet())
       Ui.active(entry.getKey(), entry.getValue().getAsBoolean());
-    if (pictureModeButton != null) {
-      PictureMode mode = PictureMode.read(store);
-      String label = "Picture: " + mode.label;
-      if (!label.contentEquals(pictureModeButton.getText())) pictureModeButton.setText(label);
-      Ui.active(pictureModeButton, mode != PictureMode.REGULAR, mode.label);
-    }
+    PictureMode mode = PictureMode.read(store);
+    Ui.active(videoOptionsButton, mode != PictureMode.REGULAR, mode.label);
+    Ui.active(audioOptionsButton, reading || audioCapturing || transcribing);
     Ui.active(fullscreenButton, fullscreen);
     Ui.active(rotationLockButton, rotationLocked);
     MenuIcons.setIcon(
@@ -713,8 +785,7 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void addLevel(LinearLayout row, String label, float value, Ui.Level changed) {
-    LinearLayout box = Ui.column(this);
-    box.setPadding(dp(6), dp(8), dp(6), dp(2));
+    FrameLayout box = new FrameLayout(this);
     box.setBackground(PlayerSkin.surface(dp(8), false));
     TextView caption =
         Ui.text(
@@ -723,7 +794,7 @@ public final class MainActivity extends ComponentActivity {
             10,
             PlayerSkin.MUTED);
     caption.setSingleLine(true);
-    box.addView(caption);
+    caption.setPadding(dp(6), dp(2), dp(6), 0);
     SeekBar slider =
         Ui.slider(
             this,
@@ -736,9 +807,11 @@ public final class MainActivity extends ComponentActivity {
     if ("Opacity".equals(label)) slider.setMin(350);
     levelSliders.put(label, slider);
     levelCaptions.put(label, caption);
-    box.addView(slider);
+    slider.setPadding(slider.getPaddingLeft(), dp(12), slider.getPaddingRight(), 0);
+    box.addView(slider, new FrameLayout.LayoutParams(-1, dp(48)));
+    box.addView(caption, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
     LinearLayout.LayoutParams bounds = new LinearLayout.LayoutParams(0, -2, 1);
-    bounds.setMargins(dp(2), dp(8), dp(2), 0);
+    bounds.setMargins(dp(2), dp(4), dp(2), 0);
     row.addView(box, bounds);
   }
 
@@ -804,15 +877,197 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void pickFiles() {
-    if (sourceLocked()) {
-      message("Finish capture/recording before changing files.");
+    pickFiles(true);
+  }
+
+  private void pickFiles(boolean play) {
+    if (sourceLocked()
+        || importingPlaylist
+        || audioCapturing
+        || transcribing
+        || browserUsingMicrophone) {
+      message("Finish the current capture, voice session or import first.");
       return;
     }
-    files.launch(new String[] {"video/*", "audio/*"});
+    pickerPlay = play;
+    pickerResumeUri =
+        player != null && player.isPlaying() && fileUri != null ? fileUri.toString() : null;
+    try {
+      files.launch(new String[] {"video/*", "audio/*"});
+    } catch (ActivityNotFoundException error) {
+      message("No document picker is installed.");
+    }
+  }
+
+  private void pickFolder(boolean play) {
+    if (sourceLocked()
+        || importingPlaylist
+        || audioCapturing
+        || transcribing
+        || browserUsingMicrophone) {
+      message("Finish the current capture, voice session or import first.");
+      return;
+    }
+    pickerPlay = play;
+    pickerResumeUri =
+        player != null && player.isPlaying() && fileUri != null ? fileUri.toString() : null;
+    try {
+      folders.launch(null);
+    } catch (ActivityNotFoundException error) {
+      message("No folder picker is installed.");
+    }
+  }
+
+  private void retainReadPermission(Uri uri) {
+    try {
+      getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    } catch (SecurityException ignored) {
+      /* Some document providers grant session-only access. */
+    }
+  }
+
+  private void resumeAfterPicker() {
+    if (pickerResumeUri != null
+        && player != null
+        && !live
+        && fileUri != null
+        && pickerResumeUri.equals(fileUri.toString())
+        && !sourceLocked()) player.play();
+    pickerResumeUri = null;
+  }
+
+  private void importFiles(List<Uri> uris, boolean play) {
+    cancelPlaylistImport();
+    if (playlistNamesScan != null) playlistNamesScan.cancel();
+    CancellationSignal signal = new CancellationSignal();
+    playlistScan = signal;
+    importingPlaylist = true;
+    refreshPlaylist();
+    playlistIo.execute(
+        () -> {
+          List<FolderMedia.Entry> found = new ArrayList<>();
+          try {
+            for (Uri uri : uris) {
+              signal.throwIfCanceled();
+              if (found.size() == 200) break;
+              if (uri.toString().length() > 8192 || !"content".equals(uri.getScheme())) continue;
+              String title = uri.getLastPathSegment();
+              try (Cursor row =
+                  getContentResolver()
+                      .query(
+                          uri,
+                          new String[] {OpenableColumns.DISPLAY_NAME},
+                          null,
+                          null,
+                          null,
+                          signal)) {
+                if (row != null && row.moveToFirst() && row.getString(0) != null)
+                  title = row.getString(0);
+              } catch (SecurityException error) {
+                continue;
+              }
+              found.add(new FolderMedia.Entry(uri, title == null ? "Video" : title));
+            }
+            main.post(() -> acceptPlaylistImport(signal, found, play, uris.size() > 200, 0));
+          } catch (OperationCanceledException ignored) {
+          } catch (Exception error) {
+            main.post(() -> failPlaylistImport(signal, error.getMessage()));
+          }
+        });
+  }
+
+  private void importFolder(Uri tree, boolean play) {
+    cancelPlaylistImport();
+    if (playlistNamesScan != null) playlistNamesScan.cancel();
+    CancellationSignal signal = new CancellationSignal();
+    playlistScan = signal;
+    importingPlaylist = true;
+    refreshPlaylist();
+    playlistIo.execute(
+        () -> {
+          try {
+            FolderMedia.Result result = FolderMedia.scan(getContentResolver(), tree, signal);
+            main.post(
+                () ->
+                    acceptPlaylistImport(
+                        signal, result.entries(), play, result.limited(), result.skipped()));
+          } catch (OperationCanceledException ignored) {
+          } catch (Exception error) {
+            main.post(() -> failPlaylistImport(signal, error.getMessage()));
+          }
+        });
+  }
+
+  private void acceptPlaylistImport(
+      CancellationSignal signal,
+      List<FolderMedia.Entry> found,
+      boolean play,
+      boolean limited,
+      int skipped) {
+    if (closed || playlistScan != signal || signal.isCanceled()) return;
+    playlistScan = null;
+    importingPlaylist = false;
+    int added = 0;
+    String first = null;
+    Map<String, String> existing = new HashMap<>();
+    for (String value : queue) existing.putIfAbsent(FolderMedia.identity(Uri.parse(value)), value);
+    for (FolderMedia.Entry entry : found) {
+      String uri = entry.uri().toString();
+      String key = FolderMedia.identity(entry.uri());
+      String saved = existing.get(key);
+      if (saved != null) {
+        fileNames.put(saved, entry.name());
+        if (first == null) first = saved;
+        continue;
+      }
+      if (queue.size() == 200) {
+        limited = true;
+        continue;
+      }
+      queue.add(uri);
+      existing.put(key, uri);
+      fileNames.put(uri, entry.name());
+      added++;
+      if (first == null) first = uri;
+    }
+    store.list("playlist", queue);
+    refreshPlaylist();
+    if (play && first != null) {
+      pickerResumeUri = null;
+      playIndex(queue.indexOf(first));
+    } else resumeAfterPicker();
+    message(
+        added
+            + " item(s) added"
+            + (limited ? " · playlist/import limit reached (200 items)" : "")
+            + (skipped > 0 ? " · " + skipped + " inaccessible folder(s) skipped" : "")
+            + (found.isEmpty() ? " · no supported media found" : ""));
+  }
+
+  private void failPlaylistImport(CancellationSignal signal, String error) {
+    if (closed || playlistScan != signal) return;
+    playlistScan = null;
+    importingPlaylist = false;
+    refreshPlaylist();
+    resumeAfterPicker();
+    message("Could not read media: " + error);
+  }
+
+  private void cancelPlaylistImport() {
+    if (playlistScan != null) playlistScan.cancel();
+    playlistScan = null;
+    importingPlaylist = false;
+    if (playlistPanel != null) refreshPlaylist();
   }
 
   private void openIncoming(Uri uri) {
-    if (!queue.contains(uri.toString())) queue.add(uri.toString());
+    if (!queue.contains(uri.toString())) {
+      if (queue.size() >= 200) {
+        message("Playlist full. Remove an item before opening another video.");
+        return;
+      }
+      queue.add(uri.toString());
+    }
     store.list("playlist", queue);
     playIndex(queue.indexOf(uri.toString()));
   }
@@ -821,7 +1076,7 @@ public final class MainActivity extends ComponentActivity {
     if (player != null) return;
     player = new ExoPlayer.Builder(this).build();
     playerView.setPlayer(player);
-    player.setVolume(videoVolume);
+    player.setVolume(browserUsingMicrophone || audioCapturing && capturingMic ? 0 : videoVolume);
     player.setTrackSelectionParameters(
         player
             .getTrackSelectionParameters()
@@ -994,53 +1249,166 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void playlist() {
-    String[] labels = new String[queue.size()];
-    for (int i = 0; i < labels.length; i++)
-      labels[i] = (i == selected ? "▶ " : "") + name(Uri.parse(queue.get(i)));
-    new android.app.AlertDialog.Builder(this)
-        .setTitle("Playlist · " + queue.size())
-        .setItems(labels, (d, index) -> playIndex(index))
-        .setPositiveButton("Add", (d, w) -> pickFiles())
-        .setNeutralButton("Manage", (d, w) -> manageQueue())
-        .setNegativeButton("Close", null)
-        .show();
+    if (playlistPanel == null) {
+      playlistPanel =
+          new PlaylistOverlay(
+              this,
+              new PlaylistOverlay.Host() {
+                public void files() {
+                  pickFiles(false);
+                }
+
+                public void folder() {
+                  pickFolder(false);
+                }
+
+                public void play(String uri) {
+                  playIndex(queue.indexOf(uri));
+                }
+
+                public void remove(String uri) {
+                  removePlaylistItem(uri);
+                }
+
+                public void move(String uri, int offset) {
+                  movePlaylistItem(uri, offset);
+                }
+
+                public void clear() {
+                  if (sourceLocked() || importingPlaylist) return;
+                  new android.app.AlertDialog.Builder(MainActivity.this)
+                      .setTitle("Clear playlist?")
+                      .setMessage(
+                          "Remove all playlist entries? Your original media files will remain on"
+                              + " the device.")
+                      .setNegativeButton("Cancel", null)
+                      .setPositiveButton("Clear", (dialog, which) -> clearPlaylist())
+                      .show();
+                }
+
+                public void cancelImport() {
+                  cancelPlaylistImport();
+                  resumeAfterPicker();
+                  message("Folder scan cancelled.");
+                }
+              });
+      root.addView(playlistPanel, new FrameLayout.LayoutParams(1, 1));
+      playlistPanel.layoutWithinParent();
+    }
+    refreshPlaylist();
+    playlistPanel.toggle();
+    updateToggleStates();
+    if (playlistPanel.getVisibility() == View.VISIBLE) loadPlaylistNames();
   }
 
-  private void manageQueue() {
-    if (sourceLocked()) return;
-    new android.app.AlertDialog.Builder(this)
-        .setTitle("Playlist actions")
-        .setItems(
-            new String[] {
-              "Move selected up", "Move selected down", "Remove selected", "Clear playlist"
-            },
-            (d, which) -> {
-              if (which == 3) {
-                if (player != null) player.stop();
-                queue.clear();
-                selected = -1;
-                fileUri = null;
-              } else if (selected >= 0 && selected < queue.size()) {
-                if (which == 0 && selected > 0) {
-                  Collections.swap(queue, selected, selected - 1);
-                  selected--;
-                }
-                if (which == 1 && selected + 1 < queue.size()) {
-                  Collections.swap(queue, selected, selected + 1);
-                  selected++;
-                }
-                if (which == 2) {
-                  bookmark(false);
-                  if (player != null) player.stop();
-                  queue.remove(selected);
-                  selected = -1;
-                  fileUri = null;
-                }
+  private void refreshPlaylist() {
+    playlistCurrent = live ? "usb" : fileUri == null ? "" : fileUri.toString();
+    if (playlistPanel == null) return;
+    List<PlaylistOverlay.Entry> rows = new ArrayList<>();
+    for (String value : queue) {
+      Uri uri = Uri.parse(value);
+      rows.add(
+          new PlaylistOverlay.Entry(
+              value, name(uri), playlistLocation(uri), !live && value.equals(playlistCurrent)));
+    }
+    playlistRows = List.copyOf(rows);
+    playlistPanel.update(playlistRows, !sourceLocked() && !importingPlaylist, importingPlaylist);
+  }
+
+  private void loadPlaylistNames() {
+    if (playlistNamesScan != null && !playlistNamesScan.isCanceled()) return;
+    List<String> pending = new ArrayList<>();
+    for (String uri : queue) if (!fileNames.containsKey(uri)) pending.add(uri);
+    if (pending.isEmpty()) return;
+    CancellationSignal signal = new CancellationSignal();
+    playlistNamesScan = signal;
+    playlistIo.execute(
+        () -> {
+          try {
+            for (String value : pending) {
+              signal.throwIfCanceled();
+              try (Cursor row =
+                  getContentResolver()
+                      .query(
+                          Uri.parse(value),
+                          new String[] {OpenableColumns.DISPLAY_NAME},
+                          null,
+                          null,
+                          null,
+                          signal)) {
+                if (row != null && row.moveToFirst() && row.getString(0) != null)
+                  fileNames.put(value, row.getString(0));
+              } catch (SecurityException | IllegalArgumentException ignored) {
               }
-              store.list("playlist", queue);
-              if (fileUri == null && !live) showSourceChooser(true);
-            })
-        .show();
+            }
+          } catch (OperationCanceledException ignored) {
+          } finally {
+            main.post(
+                () -> {
+                  if (playlistNamesScan == signal) playlistNamesScan = null;
+                  if (!closed) refreshPlaylist();
+                });
+          }
+        });
+  }
+
+  private String playlistLocation(Uri uri) {
+    String segment = uri.getLastPathSegment();
+    if (segment != null && segment.contains("/")) {
+      String parent = segment.substring(0, segment.lastIndexOf('/'));
+      if (parent.contains(":")) parent = parent.substring(parent.indexOf(':') + 1);
+      if (!parent.isBlank()) return parent;
+    }
+    return "Media file";
+  }
+
+  private void removePlaylistItem(String uri) {
+    if (sourceLocked() || importingPlaylist || !queue.contains(uri)) return;
+    if (fileUri != null && uri.equals(fileUri.toString())) {
+      bookmark(false);
+      if (!live && player != null) player.stop();
+      fileUri = null;
+      fileFrameReady = false;
+    }
+    queue.remove(uri);
+    fileNames.remove(uri);
+    selected = fileUri == null ? -1 : queue.indexOf(fileUri.toString());
+    store.list("playlist", queue);
+    refreshPlaylist();
+    if (fileUri == null && !live) showSourceChooser(true);
+  }
+
+  private void movePlaylistItem(String uri, int offset) {
+    if (sourceLocked() || importingPlaylist || Math.abs(offset) != 1) return;
+    int index = queue.indexOf(uri), next = index + offset;
+    if (index < 0 || next < 0 || next >= queue.size()) return;
+    Collections.swap(queue, index, next);
+    selected = fileUri == null ? -1 : queue.indexOf(fileUri.toString());
+    store.list("playlist", queue);
+    refreshPlaylist();
+  }
+
+  private void clearPlaylist() {
+    if (sourceLocked() || importingPlaylist) return;
+    bookmark(false);
+    if (!live && player != null) player.stop();
+    queue.clear();
+    fileNames.clear();
+    selected = -1;
+    fileUri = null;
+    fileFrameReady = false;
+    store.list("playlist", queue);
+    refreshPlaylist();
+    if (!live) showSourceChooser(true);
+  }
+
+  @Override
+  protected void onSaveInstanceState(Bundle state) {
+    state.putBoolean("pickerPlay", pickerPlay);
+    state.putString("pickerResumeUri", pickerResumeUri);
+    state.putBoolean(
+        "playlistVisible", playlistPanel != null && playlistPanel.getVisibility() == View.VISIBLE);
+    super.onSaveInstanceState(state);
   }
 
   private void chooseUsb() {
@@ -1323,6 +1691,8 @@ public final class MainActivity extends ComponentActivity {
 
   private void restoreUsbAudio() {
     if (!live
+        || browserUsingMicrophone
+        || audioCapturing && capturingMic
         || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) return;
     AudioManager manager = (AudioManager) getSystemService(AUDIO_SERVICE);
@@ -1338,7 +1708,11 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void openUsbAudio() {
-    if (!live || usbAudioDevice == null || usbAudio != null) return;
+    if (!live
+        || browserUsingMicrophone
+        || audioCapturing && capturingMic
+        || usbAudioDevice == null
+        || usbAudio != null) return;
     AudioInput input = new AudioInput();
     usbAudio = input;
     AudioDeviceInfo device = usbAudioDevice;
@@ -1529,6 +1903,10 @@ public final class MainActivity extends ComponentActivity {
     }
     if (pendingLocalClip != null) {
       finishLocalClip();
+      return;
+    }
+    if (browserUsingMicrophone) {
+      message("Finish browser voice capture before starting a recording.");
       return;
     }
     if (audioCapturing || busy) {
@@ -1856,6 +2234,14 @@ public final class MainActivity extends ComponentActivity {
       if (!subtitle) message("Play a video before copying text.");
       return;
     }
+    if (!ocrConsent.ready(
+        !subtitle,
+        () -> {
+          if (!closed && foreground) recognize(subtitle);
+        })) {
+      image.recycle();
+      return;
+    }
     Bitmap input =
         subtitle
             ? Bitmap.createBitmap(
@@ -1891,6 +2277,16 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void recognizeSubtitleBitmap(Bitmap source) {
+    if (!ocrConsent.ready(
+        false,
+        () -> {
+          if (!closed && reading && player != null)
+            for (Cue cue : player.getCurrentCues().cues)
+              if (cue.bitmap != null && !cue.bitmap.isRecycled()) {
+                recognizeSubtitleBitmap(cue.bitmap);
+                break;
+              }
+        })) return;
     if (ocrBusy || !foreground) return;
     Bitmap image = source.copy(Bitmap.Config.ARGB_8888, false);
     int token = generation;
@@ -1963,6 +2359,7 @@ public final class MainActivity extends ComponentActivity {
     if (!reading
         || !foreground
         || audioCapturing && capturingMic
+        || browserUsingMicrophone
         || text.isEmpty()
         || text.equals(lastRead)) return;
     ensureSpeaker();
@@ -2000,6 +2397,10 @@ public final class MainActivity extends ComponentActivity {
   }
 
   private void toggleBrowserPanel() {
+    if (clearingBrowserData) {
+      message("Browser data is being cleared. Please wait.");
+      return;
+    }
     if (browser == null) {
       browser =
           new BrowserOverlay(
@@ -2025,7 +2426,13 @@ public final class MainActivity extends ComponentActivity {
                 }
 
                 public void permission(Consumer<Boolean> result) {
-                  requestMic(result);
+                  prepareBrowserMicrophone(result);
+                }
+
+                public void microphoneReleased() {
+                  if (closed || !browserUsingMicrophone) return;
+                  main.removeCallbacks(restoreBrowserAudio);
+                  main.postDelayed(restoreBrowserAudio, 500);
                 }
 
                 public void feedback(String value) {
@@ -2034,6 +2441,14 @@ public final class MainActivity extends ComponentActivity {
 
                 public void frame() {
                   MainActivity.this.frame(false);
+                }
+
+                public void saveFrame() {
+                  MainActivity.this.frame(true);
+                }
+
+                public void copyRecording() {
+                  MainActivity.this.copyRecording();
                 }
 
                 public void record() {
@@ -2144,6 +2559,10 @@ public final class MainActivity extends ComponentActivity {
       finishAudio();
       return;
     }
+    if (browserUsingMicrophone) {
+      message("Finish browser voice capture before starting app Audio to text.");
+      return;
+    }
     if (transcribing || recorder != null || pendingLocalClip != null || busy) {
       message("Finish the current capture or recording first.");
       return;
@@ -2238,7 +2657,7 @@ public final class MainActivity extends ComponentActivity {
   private void finishAudio() {
     if (!audioCapturing) return;
     audioCapturing = false;
-    if (player != null) player.setVolume(videoVolume);
+    if (player != null) player.setVolume(browserUsingMicrophone ? 0 : videoVolume);
     transcribing = true;
     audioStart.setText("Transcribing…");
     audioStart.setEnabled(false);
@@ -2322,7 +2741,7 @@ public final class MainActivity extends ComponentActivity {
   private void cancelAudio() {
     audioJob++;
     audioCapturing = false;
-    if (player != null) player.setVolume(videoVolume);
+    if (player != null) player.setVolume(browserUsingMicrophone ? 0 : videoVolume);
     decoderCancelled.set(true);
     speech.cancel();
     AudioInput input = microphone;
@@ -2333,19 +2752,184 @@ public final class MainActivity extends ComponentActivity {
     if (foreground) restoreUsbAudio();
   }
 
+  private void showPrivacy() {
+    TextView content =
+        Ui.text(
+            this,
+            """
+            Media and files
+            You choose individual files or folders using Android's picker. Folder access is limited to the selected tree. Playlist entries, playback positions, settings and browser tab addresses are kept in app storage. Removing a playlist item does not delete its file.
+
+            Captures and speech
+            Saved images/recordings remain in Pictures/VideoCapture and Movies/VideoCapture until you delete them in Gallery or Files. Copy frame also saves an image. Clipboard contents are readable by paste targets you choose. App audio transcription uses the bundled offline Whisper model. Website voice audio is handled separately by the website.
+
+            OCR SDK
+            OCR images/text are processed on-device. Google's ML Kit SDK collects technical device/app information, installation identifiers and diagnostic/performance metrics that may be transmitted to Google when online. OCR requires a separate disclosure and agreement before SDK initialization. Google documents this at developers.google.com/ml-kit/android-data-disclosure.
+
+            Browser
+            Websites receive information you enter, upload or transmit using their microphone feature, under their own policies. Cookies/site storage retain logins. Microphone access is restricted to the exact ChatGPT origins and is stopped when the browser is hidden or its tab changes. Google sign-in opens an external browser; sessions are not copied between browsers.
+
+            Your controls
+            Deny/revoke camera or microphone access in Android settings. Use Clear browser data below to sign out and erase browser storage. Clear Android app storage or uninstall to remove local app preferences/history; Gallery media stays until you delete it separately. VideoCapture has no native user account, advertising or developer-operated upload service. The public publisher privacy policy and contact details must be completed before Play Store release.
+            """,
+            13,
+            PlayerSkin.TEXT);
+    content.setPadding(dp(20), dp(8), dp(20), dp(8));
+    ScrollView scroll = new ScrollView(this);
+    scroll.addView(content);
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("Privacy & data")
+        .setView(scroll)
+        .setPositiveButton("Close", null)
+        .setNeutralButton(
+            "Clear browser data",
+            (dialog, which) ->
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("Clear browser data?")
+                    .setMessage(
+                        "This closes all browser tabs, signs you out, clears website data and"
+                            + " cancels app audio transcription. Saved media and the playlist"
+                            + " remain.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Clear", (confirm, action) -> clearBrowserData())
+                    .show())
+        .show();
+  }
+
+  private void clearBrowserData() {
+    if (clearingBrowserData) return;
+    boolean full =
+        androidx.webkit.WebViewFeature.isFeatureSupported(
+            androidx.webkit.WebViewFeature.DELETE_BROWSING_DATA);
+    clearingBrowserData = true;
+    if (audioCapturing || transcribing) cancelAudio();
+    if (browser != null) {
+      browser.clearCache();
+      browser.destroy();
+      root.removeView(browser);
+      browser = null;
+      audioPanel = null;
+      audioStart = null;
+    }
+    store.list("browserTabs", List.of());
+    store.put("browserSelected", "0");
+    Runnable complete =
+        () -> {
+          clearingBrowserData = false;
+          if (!closed) {
+            updateToggleStates();
+            message("Browser cookies, website storage and cache cleared.");
+          }
+        };
+    if (full)
+      androidx.webkit.WebStorageCompat.deleteBrowsingData(
+          android.webkit.WebStorage.getInstance(), complete);
+    else {
+      android.webkit.WebStorage.getInstance().deleteAllData();
+      android.webkit.CookieManager.getInstance()
+          .removeAllCookies(
+              removed -> {
+                android.webkit.CookieManager.getInstance().flush();
+                complete.run();
+              });
+    }
+  }
+
   private void requestCamera(Runnable action) {
     if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
       action.run();
       return;
     }
-    pendingPermission =
+    if (pendingPermission != null) {
+      message("Finish the current permission request first.");
+      return;
+    }
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("USB video access")
+        .setMessage(
+            "VideoCapture needs Android camera permission to open your selected USB capture device."
+                + " Preview stays on this device. Images and recordings are saved only when you"
+                + " choose capture actions.")
+        .setPositiveButton(
+            "Continue",
+            (dialog, which) -> {
+              pendingPermission =
+                  ok -> {
+                    if (ok) action.run();
+                  };
+              requestPermissions(new String[] {Manifest.permission.CAMERA}, 201);
+            })
+        .setNegativeButton("Not now", null)
+        .show();
+  }
+
+  private void restoreBrowserAudioNow() {
+    browserUsingMicrophone = false;
+    browserAudioReady = false;
+    if (closed) return;
+    if (player != null) player.setVolume(audioCapturing && capturingMic ? 0 : videoVolume);
+    if (foreground) restoreUsbAudio();
+    updateToggleStates();
+  }
+
+  private void prepareBrowserMicrophone(Consumer<Boolean> ready) {
+    if (closed || !foreground || recorder != null) {
+      message("Finish the current recording before using the browser microphone.");
+      ready.accept(false);
+      return;
+    }
+    requestMicRaw(
         ok -> {
-          if (ok) action.run();
-        };
-    requestPermissions(new String[] {Manifest.permission.CAMERA}, 201);
+          if (!ok || closed || !foreground) {
+            ready.accept(false);
+            return;
+          }
+          main.removeCallbacks(restoreBrowserAudio);
+          if (browserUsingMicrophone && browserAudioReady) {
+            ready.accept(true);
+            return;
+          }
+          browserMicrophoneWaiters.add(ready);
+          if (browserUsingMicrophone) return;
+          browserUsingMicrophone = true;
+          browserAudioReady = false;
+          if (audioCapturing) finishAudio();
+          if (player != null) player.setVolume(0);
+          if (speaker != null) speaker.stop();
+          closeUsbAudio();
+          // The serial IO barrier runs after every owned AudioRecord has stopped/released.
+          io.execute(
+              () ->
+                  main.post(
+                      () -> {
+                        boolean allowed = !closed && foreground && browserUsingMicrophone;
+                        browserAudioReady = allowed;
+                        List<Consumer<Boolean>> waiters = List.copyOf(browserMicrophoneWaiters);
+                        browserMicrophoneWaiters.clear();
+                        for (Consumer<Boolean> waiter : waiters) waiter.accept(allowed);
+                      }));
+        });
   }
 
   private void requestMic(Consumer<Boolean> action) {
+    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+        == PackageManager.PERMISSION_GRANTED) {
+      action.accept(true);
+      return;
+    }
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("Audio access")
+        .setMessage(
+            "VideoCapture uses the microphone or your selected USB audio input for recording and"
+                + " offline transcription. Audio is processed on this device; browser voice access"
+                + " is requested separately by website origin.")
+        .setPositiveButton("Continue", (dialog, which) -> requestMicRaw(action))
+        .setNegativeButton("Not now", (dialog, which) -> action.accept(false))
+        .setOnCancelListener(dialog -> action.accept(false))
+        .show();
+  }
+
+  private void requestMicRaw(Consumer<Boolean> action) {
     if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
         == PackageManager.PERMISSION_GRANTED) {
       action.accept(true);
@@ -2356,6 +2940,7 @@ public final class MainActivity extends ComponentActivity {
       return;
     }
     pendingPermission = action;
+    requestingMicrophonePermission = true;
     requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, 202);
   }
 
@@ -2364,8 +2949,13 @@ public final class MainActivity extends ComponentActivity {
     super.onRequestPermissionsResult(code, permissions, results);
     Consumer<Boolean> callback = pendingPermission;
     pendingPermission = null;
+    requestingMicrophonePermission = false;
     boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
-    if (callback != null) callback.accept(ok);
+    if (callback != null && !closed) {
+      Runnable result = () -> callback.accept(ok);
+      if (foreground) result.run();
+      else permissionResultOnResume = result;
+    }
     if (!ok) message("Permission denied. Enable camera/microphone access in Android app settings.");
   }
 
@@ -2427,6 +3017,9 @@ public final class MainActivity extends ComponentActivity {
     main.post(tick);
     foreground = true;
     if (browser != null) browser.resume();
+    Runnable permissionResult = permissionResultOnResume;
+    permissionResultOnResume = null;
+    if (permissionResult != null) permissionResult.run();
     if (wantLive
         && usb == null
         && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -2436,18 +3029,20 @@ public final class MainActivity extends ComponentActivity {
   @Override
   protected void onPause() {
     main.removeCallbacks(tick);
+    if (optionsPopup != null) optionsPopup.dismiss();
     if (videoGestures != null) videoGestures.cancel();
     bookmark(false);
     if (player != null) player.pause();
     foreground = false;
     if (audioCapturing || transcribing) cancelAudio();
     if (speaker != null) speaker.stop();
-    if (browser != null) browser.pause();
+    if (browser != null) browser.pause(requestingMicrophonePermission);
     super.onPause();
   }
 
   @Override
   protected void onStop() {
+    if (browser != null) browser.stopMicrophone();
     finishCaptureRecording();
     if (pendingLocalClip != null) finishLocalClip();
     stopUsb();
@@ -2457,6 +3052,10 @@ public final class MainActivity extends ComponentActivity {
   @Override
   protected void onDestroy() {
     closed = true;
+    permissionResultOnResume = null;
+    cancelPlaylistImport();
+    if (playlistNamesScan != null) playlistNamesScan.cancel();
+    playlistIo.shutdownNow();
     if (clipExport != null) {
       clipExport.cancel();
       clipExport = null;
@@ -2465,6 +3064,7 @@ public final class MainActivity extends ComponentActivity {
     }
     main.removeCallbacks(tick);
     main.removeCallbacks(hideGestureFeedback);
+    main.removeCallbacks(restoreBrowserAudio);
     speech.close();
     if (browser != null) browser.destroy();
     browserFilesResult = null;
@@ -2473,6 +3073,7 @@ public final class MainActivity extends ComponentActivity {
       player.release();
       player = null;
     }
+    if (ocrConsent != null) ocrConsent.close();
     if (ocr != null) ocr.close();
     if (speaker != null) speaker.shutdown();
     io.execute(io::shutdown);

@@ -32,6 +32,9 @@ final class UsbCapture implements AutoCloseable, VideoSurfaceSource {
 
   UsbCapture(Listener listener) {
     this.listener = listener;
+    // Recording/audio routing belong to CaptureRecorder/AudioInput. The upstream default
+    // otherwise allocates a second microphone recorder merely when opening USB preview.
+    camera.setVideoCaptureConfig(camera.getVideoCaptureConfig().setAudioCaptureEnable(false));
     camera.setStateCallback(
         new ICameraHelper.StateCallback() {
           public void onAttach(UsbDevice device) {
